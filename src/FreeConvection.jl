@@ -50,8 +50,8 @@ using LinearAlgebra: Tridiagonal
 
 using Oceananigans:
     CPU, RegularRectilinearGrid, CenterField, ZFaceField, ComputedField, set!, compute!, interior,
-    FluxBoundaryCondition, GradientBoundaryCondition, TracerBoundaryConditions, fill_halo_regions!,
-    Forcing, IncompressibleModel, Simulation, run!
+    FluxBoundaryCondition, GradientBoundaryCondition, fill_halo_regions!,
+    Forcing, NonhydrostaticModel, Simulation, run!
 
 using Oceananigans.Grids: Periodic, Bounded
 using Oceananigans.OutputWriters: NetCDFOutputWriter, TimeInterval

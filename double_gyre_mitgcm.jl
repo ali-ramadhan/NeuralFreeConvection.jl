@@ -126,7 +126,7 @@ closure = AnisotropicDiffusivity(νh=5000, νz=1e-2, κh=5000, κz=1e-5)
 
 @info "Model setup..."
 
-model = IncompressibleModel(
+model = NonhydrostaticModel(
            architecture = CPU(),
                    grid = grid,
             timestepper = :RungeKutta3,

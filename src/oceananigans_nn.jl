@@ -84,7 +84,7 @@ function base_model(ds; forcing=NamedTuple())
 
     ## Model setup
 
-    model = IncompressibleModel(grid=grid, boundary_conditions=(T=T_bcs,), forcing=forcing)
+    model = NonhydrostaticModel(grid=grid, boundary_conditions=(T=T_bcs,), forcing=forcing)
 
     T₀ = reshape(Array(interior(T)[1, 1, :, 1]), size(grid)...)
     set!(model, T=T₀)
