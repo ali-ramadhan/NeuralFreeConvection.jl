@@ -6,8 +6,8 @@ using CairoMakie.Makie: wong_colors
 
 Nz = 32
 
-# data = load_data(ids_train, ids_test, Nz)
-# datasets = data.coarse_datasets
+data = load_data(ids_train, ids_test, Nz)
+datasets = data.coarse_datasets
 
 id = 3  # Simulation to plot
 
@@ -19,13 +19,17 @@ ns = [n0, n6, n96]
 
 ds = datasets[id]
 
-K = 0.2
-add_convective_adjustment_flux!(ds, K)
+K = 2
+ca_solution = oceananigans_convective_adjustment(ds; K)
+
+T_param = ca_solution.T
+wT_param = ca_solution.wT
+
+wT_LES = interior(ds["wT"])[1, 1, :, :]
+wT_missing = wT_LES .- wT_param
 
 T = ds["T"]
 wT = ds["wT"]
-wT_param = ds["wT_param"]
-wT_missing = ds["wT_missing"]
 
 zc = znodes(T)
 zf = znodes(wT)
@@ -34,17 +38,26 @@ colors = wong_colors()
 
 fig = Figure()
 
+## Left panel: Temperature
+
 ax = fig[1, 1] = Axis(fig, xlabel="Temperature (°C)", ylabel="z (m)")
 
 for (i, n) in enumerate(ns)
     T_n = interior(T)[1, 1, :, n]
     lines!(ax, T_n, zc, linewidth=3, color=colors[i])
+
+    T_param_n = T_param[:, n]
+    lines!(ax, T_param_n, zc, linewidth=3, color=colors[i], linestyle=:dash)
 end
 
 ax.yticks = 0:-32:-128
+ax.xgridvisible = false
+ax.ygridvisible = false
 
 xlims!(19.75, 20)
 ylims!(-128, 0)
+
+## Right panel: heat flux
 
 ax = fig[1, 2] = Axis(fig, xlabel="Heat flux (m/s K)")
 
@@ -52,20 +65,23 @@ for (i, n) in enumerate(ns)
     wT_n = interior(wT)[1, 1, :, n]
     lines!(ax, wT_n, zf, linewidth=3, color=colors[i])
 
-    wT_param_n = interior(wT_param)[1, 1, :, n]
+    wT_param_n = wT_param[:, n]
     lines!(ax, wT_param_n, zf, linewidth=3, color=colors[i], linestyle=:dash)
 
-    wT_missing_n = interior(wT_missing)[1, 1, :, n]
-    lines!(ax, wT_missing_n, zf, linewidth=3, color=colors[i], linestyle=:dot)
+    # Easier to infer by eye...
+    # wT_missing_n = wT_missing[:, n]
+    # lines!(ax, wT_missing_n, zf, linewidth=3, color=colors[i], linestyle=:dot)
 end
 
 ax.yticks = 0:-32:-128
 ax.ytickformat = ys -> ["" for y in ys]
+ax.xgridvisible = false
+ax.ygridvisible = false
 
 ylims!(-128, 0)
 
-entries = [LineElement(color=colors[l]) for l in 1:3]
-labels = ["t = 0", "t = 12 hours", "t = 4 days"]
+entries = append!([LineElement(color=colors[l]) for l in 1:3], [LineElement(linestyle=s) for s in (:dash,)])
+labels = ["t = 0", "t = 12 hours", "t = 4 days", "convective adjustment"]
 Legend(fig[0, :], entries, labels, framevisible=false, orientation=:horizontal, tellwidth=false, tellheight=true)
 
 save("figure3_training_data.png", fig, px_per_unit=2)
