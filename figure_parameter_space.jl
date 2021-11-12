@@ -17,7 +17,7 @@ N²s = 1e-5 .* [
     1,    1.5,  2,
     1,    1.5,  2,
     1.25, 1.25, 1.75,
-    0.5,  0.5,  3
+    0.75,  0.75,  2.25
 ]
 
 function color(id; alpha=1.0)
@@ -56,5 +56,5 @@ Legend(fig[1, 2], entries, labels, framevisible=false)
 
 xlims!(0.25e-8, 7e-8)
 
-save("parameter_space.png", fig, px_per_unit=2)
-save("parameter_space.pdf", fig, pt_per_unit=2)
+save("figure4_parameter_space.png", fig, px_per_unit=2)
+save("figure4_parameter_space.pdf", fig, pt_per_unit=2)
