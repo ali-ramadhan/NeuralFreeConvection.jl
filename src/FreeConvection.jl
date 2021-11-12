@@ -25,7 +25,10 @@ export
     plot_initial_vs_final_loss_matrix, plot_initial_vs_final_loss_matrix_filled_curves,
 
     # Data
-    validate_simulation_ids, load_data
+    validate_simulation_ids, load_data,
+
+    # Plotting utils
+    simulation_color, simulation_label
 
 using Logging
 using Printf
@@ -49,15 +52,15 @@ using Oceananigans.Utils: prettytime
 using LinearAlgebra: Tridiagonal
 
 using Oceananigans:
-    CPU, RegularRectilinearGrid, CenterField, ZFaceField, ComputedField, set!, compute!, interior,
+    CPU, RegularRectilinearGrid, Field, CenterField, ZFaceField, ComputedField, set!, compute!, interior,
     FluxBoundaryCondition, GradientBoundaryCondition, fill_halo_regions!,
-    Forcing, NonhydrostaticModel, Simulation, run!
+    Forcing, NonhydrostaticModel, Simulation, run!,
+    FieldTimeSeries, FieldDataset
 
 using Oceananigans.Grids: Periodic, Bounded
 using Oceananigans.OutputWriters: NetCDFOutputWriter, TimeInterval
 using Oceananigans.AbstractOperations: @at, ∂z
 
-include("coarse_grain.jl")
 include("add_surface_fluxes.jl")
 include("convective_adjustment_flux.jl")
 include("animations.jl")
@@ -71,6 +74,7 @@ include("k_profile_parameterization.jl")
 include("tke_mass_flux.jl")
 include("oceananigans_nn.jl")
 include("data.jl")
+include("utils.jl")
 
 function __init__()
     Logging.global_logger(OceananigansLogger())
