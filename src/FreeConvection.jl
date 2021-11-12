@@ -53,9 +53,9 @@ using LinearAlgebra: Tridiagonal
 
 using Oceananigans:
     CPU, RegularRectilinearGrid, Field, CenterField, ZFaceField, ComputedField, set!, compute!, interior,
-    FluxBoundaryCondition, GradientBoundaryCondition, fill_halo_regions!,
-    Forcing, NonhydrostaticModel, Simulation, run!,
-    FieldTimeSeries, FieldDataset
+    FluxBoundaryCondition, GradientBoundaryCondition, FieldBoundaryConditions, fill_halo_regions!,
+    Forcing, NonhydrostaticModel, Simulation, Callback, run!,
+    FieldTimeSeries, FieldDataset, IterationInterval
 
 using Oceananigans.Grids: Periodic, Bounded
 using Oceananigans.OutputWriters: NetCDFOutputWriter, TimeInterval

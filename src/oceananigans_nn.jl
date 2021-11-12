@@ -80,7 +80,7 @@ function base_model(ds; forcing=NamedTuple())
 
     T_bc_top = FluxBoundaryCondition(heat_flux)
     T_bc_bottom = GradientBoundaryCondition(∂T₀∂z)
-    T_bcs = TracerBoundaryConditions(grid, top=T_bc_top, bottom=T_bc_bottom)
+    T_bcs = FieldBoundaryConditions(top=T_bc_top, bottom=T_bc_bottom)
 
     ## Model setup
 
@@ -92,7 +92,7 @@ function base_model(ds; forcing=NamedTuple())
     return model
 end
 
-function oceananigans_convective_adjustment(ds; output_dir, Δt=600, K=10)
+function oceananigans_convective_adjustment(ds; output_dir=".", Δt=600, K=10)
     model = base_model(ds)
 
     ## Simulation setup
@@ -106,10 +106,8 @@ function oceananigans_convective_adjustment(ds; output_dir, Δt=600, K=10)
 
     stop_time = ds["T"].times[end]
 
-    simulation = Simulation(model, Δt=Δt,
-        iteration_interval = 1,
-                 stop_time = stop_time,
-                  progress = progress_convective_adjustment)
+    simulation = Simulation(model, Δt=Δt, stop_time = stop_time)
+    simulation.callbacks[:progress] = Callback(progress_convective_adjustment, IterationInterval(1))
 
     ## Output writing
 
