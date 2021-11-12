@@ -28,7 +28,21 @@ function convective_adjustment_flux(T::FieldTimeSeries, K)
     return κ_∂T∂z
 end
 
-function add_convective_adjustment_flux!(ds, K)
-    ds.fields["wT_param"] = convective_adjustment_flux(ds.fields["T"], K)
+function add_convective_adjustment_flux!(ds, K; add_missing_flux=true)
+
+    T = ds.fields["T"]
+
+    ds.fields["wT_param"] = convective_adjustment_flux(T, K)
+
+    if add_missing_flux
+        wT = ds.fields["wT"]
+        wT_param = ds.fields["wT_param"]
+
+        wT_missing = FieldTimeSeries(T.grid, (Center, Center, Face), T.times, ArrayType=Array{Float32})
+        interior(wT_missing) .= interior(wT) .- interior(wT_param)
+
+        ds.fields["wT_missing"] = wT_missing
+    end
+
     return nothing
 end
