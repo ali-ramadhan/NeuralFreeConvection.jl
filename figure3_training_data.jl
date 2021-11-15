@@ -12,7 +12,7 @@ ids_test = setdiff(FreeConvection.SIMULATION_IDS, ids_train)
 data = load_data(ids_train, ids_test, Nz)
 datasets = data.coarse_datasets
 
-function figure3_training_data(ds; filepath_prefix, convective_adjustment_diffusivity=2)
+function figure3_training_data(ds; filepath_prefix, plot_missing_flux=false, convective_adjustment_diffusivity=2)
     n0  = 1   # time index for t = 0
     n6  = 73  # time index for t = 12 hours
     n96 = 577 # time index for t = 4 days
@@ -68,8 +68,10 @@ function figure3_training_data(ds; filepath_prefix, convective_adjustment_diffus
         lines!(ax, wT_param_n, zf, linewidth=3, color=colors[i], linestyle=:dash)
 
         # Easier to infer wT_missing by eye so I'll leave it off.
-        # wT_missing_n = wT_missing[:, n]
-        # lines!(ax, wT_missing_n, zf, linewidth=3, color=colors[i], linestyle=:dot)
+        if plot_missing_flux
+            wT_missing_n = wT_missing[:, n]
+            lines!(ax, wT_missing_n, zf, linewidth=3, color=colors[i], linestyle=:dot)
+        end
     end
 
     ax.yticks = 0:-32:-128
