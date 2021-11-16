@@ -1,3 +1,10 @@
+# Script modified from: https://github.com/CliMA/LESbrary.jl/blob/master/examples/three_layer_constant_fluxes.jl
+# Also includes contributions by:
+#   https://github.com/glwagner
+#   https://github.com/adelinehillier
+#   https://github.com/xkykai
+#   https://github.com/tomchor
+
 # # Turbulent mixing of a three layer boundary layer driven by constant surface fluxes
 
 # This script runs a simulation of a turbulent oceanic boundary layer with an initial
@@ -156,7 +163,7 @@ function parse_command_line_arguments()
 
         "--name"
             help = "A name to add to the end of the output filename, e.g. weak_wind_strong_cooling."
-            default = ""
+            default = "test_simulation"
             arg_type = String
     end
 
@@ -193,7 +200,7 @@ thermocline_type = args["thermocline"]
 
 prefix = @sprintf("three_layer_constant_fluxes_%s_hr%d_Qu%.1e_Qb%.1e_f%.1e_Nh%d_Nz%d_",
                   thermocline_type, stop_hours, abs(Qᵘ), Qᵇ, f, Nx, Nz)
-data_directory = joinpath(@__DIR__, "..", "data", prefix * name) # save data in /data/prefix
+data_directory = joinpath(@__DIR__, name)
 
 # Copy this file into the directory with data
 mkpath(data_directory)
@@ -480,7 +487,7 @@ for with_halos in [true, false]
                                   dir = data_directory,
                                prefix = name_with_halos("3d", with_halos),
                              schedule = TimeInterval(1day),
-                         field_slicer = FieldSlicer(with_halos=with_halos)
+                         field_slicer = FieldSlicer(with_halos=with_halos),
                                 force = force,
                                  init = init_save_some_metadata!)
 

@@ -17,7 +17,8 @@ deps/src/
 docs/build/
 docs/site/
 
-# Oceananigans output
+# Oceananigans data output
+free_convection*/
 *.nc
 *.jld2
 
