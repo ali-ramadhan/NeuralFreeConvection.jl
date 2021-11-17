@@ -1,3 +1,6 @@
+minimum_nonzero(xs...) = min([minimum(filter(!iszero, x)) for x in xs]...)
+maximum_nonzero(xs...) = max([maximum(filter(!iszero, x)) for x in xs]...)
+
 function simulation_color(id; alpha=1.0)
     colors = CairoMakie.Makie.wong_colors(alpha)
      1 <= id <= 9  && return colors[1]

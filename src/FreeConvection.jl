@@ -28,7 +28,7 @@ export
     validate_simulation_ids, load_data,
 
     # Plotting utils
-    simulation_color, simulation_label
+    simulation_color, simulation_label, minimum_nonzero, maximum_nonzero
 
 using Logging
 using Printf
