@@ -1,23 +1,16 @@
+using Printf
 using CairoMakie
 using Oceananigans
 using FreeConvection
 
 using CairoMakie.Makie: wong_colors
 
-Nz = 32
-
-ids_train = 1:9
-ids_test = setdiff(FreeConvection.SIMULATION_IDS, ids_train)
-
-data = load_data(ids_train, ids_test, Nz)
-datasets = data.coarse_datasets
-
 function figure3_training_data(ds; filepath_prefix, plot_missing_flux=false, convective_adjustment_diffusivity=2)
-    n0  = 1   # time index for t = 0
-    n6  = 73  # time index for t = 12 hours
-    n96 = 577 # time index for t = 4 days
+    n0 = 1    # time index for t = 0
+    n2 = 289  # time index for t = 2 days
+    n8 = 1153 # time index for t = 8 days
 
-    ns = [n0, n6, n96]
+    ns = [n0, n2, n8]
 
     ca_solution = oceananigans_convective_adjustment(ds, K=convective_adjustment_diffusivity)
 
@@ -53,7 +46,7 @@ function figure3_training_data(ds; filepath_prefix, plot_missing_flux=false, con
     ax.xgridvisible = false
     ax.ygridvisible = false
 
-    xlims!(19.75, 20)
+    xlims!(19.5, 20)
     ylims!(-128, 0)
 
     ## Right panel: heat flux
@@ -82,7 +75,7 @@ function figure3_training_data(ds; filepath_prefix, plot_missing_flux=false, con
     ylims!(-128, 0)
 
     entries = append!([LineElement(color=colors[l]) for l in 1:3], [LineElement(linestyle=s) for s in (:dash,)])
-    labels = ["t = 0", "t = 12 hours", "t = 4 days", "convective adjustment"]
+    labels = ["t = 0", "t = 2 days", "t = 8 days", "convective adjustment"]
     Legend(fig[0, :], entries, labels, framevisible=false, orientation=:horizontal, tellwidth=false, tellheight=true)
 
     save("$filepath_prefix.png", fig, px_per_unit=2)
@@ -91,8 +84,16 @@ function figure3_training_data(ds; filepath_prefix, plot_missing_flux=false, con
     return nothing
 end
 
+Nz = 32
+
+ids_train = 1:9
+ids_test = setdiff(FreeConvection.SIMULATION_IDS, ids_train)
+
+data = load_data(ids_train, ids_test, Nz)
+datasets = data.coarse_datasets
+
 for (id, ds) in datasets
-    filepath_prefix = "figure3_training_data_simulation$id"
+    filepath_prefix = "figure3_training_data_simulation" * @sprintf("%02d", id)
     @info "Plotting $filepath_prefix..."
     figure3_training_data(ds; filepath_prefix)
 end
