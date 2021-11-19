@@ -111,9 +111,9 @@ coarse_datasets = data.coarse_datasets
 
 @info "Reading neural network from disk..."
 
-nn_history_filepath = joinpath(output_dir, "neural_network_trained_on_fluxes_history.jld2")
-final_nn_filepath = joinpath(output_dir, "neural_network_trained_on_fluxes.jld2")
-initial_nn_filepath = joinpath(output_dir, "neural_network_trained_on_fluxes.jld2")
+nn_history_filepath = joinpath(output_dir, "neural_network_history.jld2")
+final_nn_filepath = joinpath(output_dir, "free_convection_trained_neural_network.jld2")
+initial_nn_filepath = joinpath(output_dir, "free_convection_initial_neural_network.jld2")
 
 file = jldopen(final_nn_filepath, "r")
 NN = file["neural_network"]
@@ -157,6 +157,36 @@ else
 end
 
 
+@info "Computing NDE solution history..."
+
+if isfile(solutions_filepath)
+    @info "Loading NDE solution history from $solutions_filepath..."
+    @error "Load the data from the JLD2 file!"
+else
+    nde_solution_history = compute_nde_solution_history(coarse_datasets, NDEType, algorithm, final_nn_filepath, nn_history_filepath)
+end
+
+
+@info "Saving solutions to JLD2..."
+
+jldopen(solutions_filepath, "w") do file
+    file["grid_points"] = Nz
+    file["neural_network"] = NN
+    file["T_scaling"] = T_scaling
+    file["wT_scaling"] = wT_scaling
+
+    file["true"] = true_solutions
+    file["nde"] = nde_solutions
+    file["kpp"] = kpp_solutions
+    file["tke"] = tke_solutions
+    file["initial_nde"] = initial_nde_solutions
+    file["convective_adjustment"] = convective_adjustment_solutions
+    file["oceananigans"] = oceananigans_solutions
+
+    file["nde_history"] = nde_solution_history
+end
+
+
 @info "Plotting loss matrix..."
 
 plot_loss_matrix(coarse_datasets, ids_train, nde_solutions, kpp_solutions, tke_solutions,
@@ -192,16 +222,6 @@ if animate_nde_solution
         animate_learned_free_convection(ds, NN, free_convection_neural_network, NDEType, algorithm, T_scaling, wT_scaling,
                                         filepath=filepath, frameskip=5)
     end
-end
-
-
-@info "Computing NDE solution history..."
-
-if isfile(solutions_filepath)
-    @info "Loading NDE solution history from $solutions_filepath..."
-    @error "Load the data from the JLD2 file!"
-else
-    nde_solution_history = compute_nde_solution_history(coarse_datasets, NDEType, algorithm, final_nn_filepath, nn_history_filepath)
 end
 
 
@@ -246,24 +266,4 @@ if plot_les_flux_fraction
     end
 
     Plots.savefig(joinpath(output_dir, "les_flux_contribution.png"))
-end
-
-
-@info "Saving solutions to JLD2..."
-
-jldopen(solutions_filepath, "w") do file
-    file["grid_points"] = Nz
-    file["neural_network"] = NN
-    file["T_scaling"] = T_scaling
-    file["wT_scaling"] = wT_scaling
-
-    file["true"] = true_solutions
-    file["nde"] = nde_solutions
-    file["kpp"] = kpp_solutions
-    file["tke"] = tke_solutions
-    file["initial_nde"] = initial_nde_solutions
-    file["convective_adjustment"] = convective_adjustment_solutions
-    file["oceananigans"] = oceananigans_solutions
-
-    file["nde_history"] = nde_solution_history
 end

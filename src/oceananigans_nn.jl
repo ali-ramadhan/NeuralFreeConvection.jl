@@ -237,8 +237,8 @@ function oceananigans_convective_adjustment_with_neural_network(ds; output_dir, 
         return nothing
     end
 
-    simulation = Simulation(model, Δt=Δt, iteration_interval=1,
-                            stop_time=stop_time, progress=progress_neural_network)
+    simulation = Simulation(model, Δt=Δt, stop_time=stop_time)
+    simulation.callbacks[:progress] = Callback(progress_neural_network, IterationInterval(1))
 
     ## Output writing
 

@@ -33,7 +33,7 @@ function plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solution
         lines!(ax1, 1:epochs, mean_loss_training, color=simulation_color(sub_ids[1]))
     end
 
-    CairoMakie.xlims!(0, epochs)
+    xlims!(0, epochs)
 
     entry_ids = (1, 10, 13, 16, 19)
     entries = [PolyElement(color=simulation_color(id)) for id in entry_ids]
