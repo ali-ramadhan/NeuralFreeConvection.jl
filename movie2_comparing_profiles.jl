@@ -10,7 +10,7 @@ using CairoMakie.Makie: wong_colors
 using Oceananigans: interior, znodes
 using Oceananigans.Units: days
 
-function figure8_comparing_profiles(ds, nde_sol, kpp_sol, convective_adjustment_sol, T_scaling; filepath_prefix, time_index)
+function movie2_comparing_profiles(ds, nde_sol, kpp_sol, convective_adjustment_sol, T_scaling; filepath_prefix, resolution=(1280, 720), fps=30)
     T = ds["T"]
     wT = ds["wT"]
     Nt = size(T, 4)
@@ -29,22 +29,30 @@ function figure8_comparing_profiles(ds, nde_sol, kpp_sol, convective_adjustment_
 
     colors = wong_colors()
 
-    fig = Figure()
+    fig = Figure(; resolution)
+
+    time_index = Node(1)
 
     ## Left panel: heat fluxes
 
     ax = fig[1, 1] = Axis(fig, xlabel="Heat flux (m/s K)", ylabel="z (m)")
 
     ylims!(-128, 0)
+    xlims!(extrema(nde_sol.wT)...)
 
     ax.yticks = 0:-32:-128
     ax.xgridvisible = false
     ax.ygridvisible = false
 
-    lines!(ax, interior(wT)[1, 1, :, time_index], zf, linewidth=3, color=colors[1])
-    lines!(ax, convective_adjustment_sol.wT[:, time_index], zf, linewidth=3, color=colors[2])
-    lines!(ax, kpp_sol.wT[:, time_index], zf, linewidth=3, color=colors[3])
-    lines!(ax, nde_sol.wT[:, time_index], zf, linewidth=3, color=colors[4])
+    wT_les = @lift interior(wT)[1, 1, :, $time_index]
+    wT_ca = @lift convective_adjustment_sol.wT[:, $time_index]
+    wT_kpp = @lift kpp_sol.wT[:, $time_index]
+    wT_nde = @lift nde_sol.wT[:, $time_index]
+
+    lines!(ax, wT_les, zf, linewidth=3, color=colors[1])
+    lines!(ax, wT_ca, zf, linewidth=3, color=colors[2])
+    lines!(ax, wT_kpp, zf, linewidth=3, color=colors[3])
+    lines!(ax, wT_nde, zf, linewidth=3, color=colors[4])
 
     ## Middle panel: temperatures
 
@@ -56,10 +64,15 @@ function figure8_comparing_profiles(ds, nde_sol, kpp_sol, convective_adjustment_
     ax.xgridvisible = false
     ax.ygridvisible = false
 
-    lines!(ax, interior(T)[1, 1, :, time_index], zc, linewidth=3, color=colors[1])
-    lines!(ax, convective_adjustment_sol.T[:, time_index], zc, linewidth=3, color=colors[2])
-    lines!(ax, kpp_sol.T[:, time_index], zc, linewidth=3, color=colors[3])
-    lines!(ax, nde_sol.T[:, time_index], zc, linewidth=3, color=colors[4])
+    T_les = @lift interior(T)[1, 1, :, $time_index]
+    T_ca = @lift convective_adjustment_sol.T[:, $time_index]
+    T_kpp = @lift kpp_sol.T[:, $time_index]
+    T_nde = @lift nde_sol.T[:, $time_index]
+
+    lines!(ax, T_les, zc, linewidth=3, color=colors[1])
+    lines!(ax, T_ca, zc, linewidth=3, color=colors[2])
+    lines!(ax, T_kpp, zc, linewidth=3, color=colors[3])
+    lines!(ax, T_nde, zc, linewidth=3, color=colors[4])
 
     ## Right panel: losses
 
@@ -71,16 +84,28 @@ function figure8_comparing_profiles(ds, nde_sol, kpp_sol, convective_adjustment_
     ax.xgridvisible = false
     ax.ygridvisible = false
 
+    # times_evolution = @lift times[1:$time_index]
+    # loss_ca_evolution = @lift loss_ca[1:$time_index]
+    # loss_kpp_evolution = @lift loss_kpp[1:$time_index]
+    # loss_nde_evolution = @lift loss_nde[1:$time_index]
+
     lines!(ax, times, loss_ca, linewidth=3, color=colors[2])
     lines!(ax, times, loss_kpp, linewidth=3, color=colors[3])
     lines!(ax, times, loss_nde, linewidth=3, color=colors[4])
 
     entries = [LineElement(color=colors[l]) for l in 1:4]
     labels = ["true (LES)", "Convective adjustment", "KPP", "NDE"]
+
+    # entries = [LineElement(color=colors[l]) for l in (1, 2, 4)]
+    # labels = ["true (LES)", "Convective adjustment", "NDE"]
+
     Legend(fig[0, :], entries, labels, framevisible=false, orientation=:horizontal, tellwidth=false, tellheight=true)
 
-    save("$filepath_prefix.png", fig, px_per_unit=2)
-    save("$filepath_prefix.pdf", fig, pt_per_unit=2)
+    Nt = length(times)
+    record(fig, "$filepath_prefix.mp4", 1:Nt; framerate=fps) do n
+        @info "Animating $filepath_prefix frame $n/$Nt..."
+        time_index[] = n
+    end
 
     return nothing
 end
@@ -100,13 +125,10 @@ kpp_solutions = file["kpp"]
 convective_adjustment_solutions = file["convective_adjustment"]
 T_scaling = file["T_scaling"]
 
-# time_index = 577 # t = 4 days
-time_index = 1153 # t = 8 days
-
-for id in keys(datasets)
-    filepath_prefix = "figure8_comparing_profiles_simulation" * @sprintf("%02d", id)
-    @info "Plotting $filepath_prefix..."
-    figure8_comparing_profiles(datasets[id], nde_solutions[id], kpp_solutions[id], convective_adjustment_solutions[id], T_scaling; filepath_prefix, time_index)
+for id in [15] # keys(datasets)
+    filepath_prefix = "movie2_comparing_profiles_simulation" * @sprintf("%02d", id)
+    @info "Animating $filepath_prefix..."
+    movie2_comparing_profiles(datasets[id], nde_solutions[id], kpp_solutions[id], convective_adjustment_solutions[id], T_scaling; filepath_prefix)
 end
 
 close(file)
