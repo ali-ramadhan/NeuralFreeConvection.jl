@@ -41,7 +41,7 @@ function dense_spatial_causality_train!(loss, ps, data, opt; cb = () -> ())
 
 end
 
-function train_neural_differential_equation!(NN, NDEType, algorithm, datasets, T_scaling, wT_scaling, iterations, opt, epochs; history_filepath=nothing, causal_penalty=nothing)
+function train_neural_differential_equation!(NN, NDEType, algorithm, datasets, T_scaling, wT_scaling, iterations, opt, epochs; history_filepath=nothing)
 
     ids = [id for id in keys(datasets)] |> sort
 

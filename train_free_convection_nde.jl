@@ -40,11 +40,6 @@ function parse_command_line_arguments()
             default = "Tsit5"
             arg_type = String
 
-        "--output-directory"
-            help = "Output directory filepath."
-            default = joinpath(@__DIR__, "testing")
-            arg_type = String
-
         "--training-simulations"
             help = "Simulation IDs (list of integers separated by spaces) to train the neural differential equation on." *
                    "All other simulations will be used for testing/validation."
@@ -63,19 +58,19 @@ function parse_command_line_arguments()
             default = 10
             arg_type = Int
 
-        "--conv"
-            help = "Toggles filter dim/if a convolutional layer is included in the NN architecture. conv > 1 --> layer is added"
-            default = 0
-            arg_type = Int
-
-        "--spatial_causality"
-            help = "Toggles how/if spatial causality is enforced in dense layer models. Empty string -> not enforced."
-            default = ""
+        "--neural-network-architecture"
+            help = "Chooses from a set of pre-defined neural network architectures. Options: dense-default, dense-deeper, dense-wider, conv-2, conv-4"
+            default = "dense-default"
             arg_type = String
 
         "--animate-training-data"
             help = "Produce gif and mp4 animations of each training simulation's data."
             action = :store_true
+
+        "--output-directory"
+            help = "Output directory filepath."
+            default = joinpath(@__DIR__, "testing")
+            arg_type = String
     end
 
     return parse_args(settings)
@@ -95,11 +90,9 @@ Nz = args["grid-points"]
 NDEType = nde_type[args["base-parameterization"]]
 algorithm = Meta.parse(args["time-stepper"] * "()") |> eval
 
+nn_architecture = args["neural-network-architecture"]
 burn_in_epochs = args["burn-in-epochs"]
 full_epochs = args["training-epochs"]
-
-conv = args["conv"]
-spatial_causality = args["spatial_causality"]
 
 ids_train = args["training-simulations"][1]
 ids_test = setdiff(FreeConvection.SIMULATION_IDS, ids_train)
@@ -128,18 +121,37 @@ TeeLogger(
 
 @info "Architecting neural network..."
 
-if conv > 1
-    NN = Chain(
-           x -> reshape(x, Nz, 1, 1, 1),
-           Conv((conv, 1), 1 => 1, relu),
-           x -> reshape(x, Nz-conv+1),
-           Dense(Nz-conv+1, 4Nz, relu),
-           Dense(4Nz, 4Nz, relu),
-           Dense(4Nz, Nz-1))
-else
+if nn_architecture == "dense-default"
     NN = Chain(Dense(Nz, 4Nz, relu),
                Dense(4Nz, 4Nz, relu),
                Dense(4Nz, Nz-1))
+elseif nn_architecture == "dense-wider"
+    NN = Chain(Dense(Nz, 8Nz, relu),
+               Dense(8Nz, 8Nz, relu),
+               Dense(8Nz, Nz-1))
+elseif nn_architecture == "dense-deeper"
+    NN = Chain(Dense(Nz, 4Nz, relu),
+               Dense(4Nz, 4Nz, relu),
+               Dense(4Nz, 4Nz, relu),
+               Dense(4Nz, Nz-1))
+elseif nn_architecture == "conv-2"
+    conv = 2
+    NN = Chain(x -> reshape(x, Nz, 1, 1, 1),
+               Conv((conv, 1), 1 => 1, relu),
+               x -> reshape(x, Nz-conv+1),
+               Dense(Nz-conv+1, 4Nz, relu),
+               Dense(4Nz, 4Nz, relu),
+               Dense(4Nz, Nz-1))
+elseif nn_architecture == "conv-4"
+    conv = 4
+    NN = Chain(x -> reshape(x, Nz, 1, 1, 1),
+               Conv((conv, 1), 1 => 1, relu),
+               x -> reshape(x, Nz-conv+1),
+               Dense(Nz-conv+1, 4Nz, relu),
+               Dense(4Nz, 4Nz, relu),
+               Dense(4Nz, Nz-1))
+else
+    @error "Invalid neural network architecture: $nn_architecture"
 end
 
 function free_convection_neural_network(input)
@@ -223,23 +235,7 @@ n_batches = ceil(Int, n_obs / batch_size)
 
 @info "Training neural network on fluxes: ⟨T⟩(z) -> ⟨w′T′⟩(z) mapping..."
 
-causal_penalty = nothing
-
-if spatial_causality == "soft"
-    ps = Flux.params(NN)
-
-    dense_layer_idx = 1 + Int(conv > 1) * 3
-    dense_layer_params_idx = 1 + Int(conv > 1) * 2
-
-    nrows, ncols = size(ps[dense_layer_params_idx])
-    mask = [x < y ? true : false for x in 1:nrows, y in 1:ncols]
-
-    causal_penalty() = sum(abs2, NN[dense_layer_idx].W[mask])
-
-    nn_loss(input, output) = Flux.mse(free_convection_neural_network(input), output) + causal_penalty()
-else
-    nn_loss(input, output) = Flux.mse(free_convection_neural_network(input), output)
-end
+nn_loss(input, output) = Flux.mse(free_convection_neural_network(input), output)
 
 nn_training_set_loss(training_data) = mean(nn_loss(input, output) for (input, output) in training_data)
 
@@ -281,11 +277,11 @@ if burn_in_epochs > 0
     for iterations in training_iterations
         @info "Training free convection NDE with iterations=$iterations for $burn_in_epochs epochs  with $(typeof(opt))(η=$(opt.eta))..."
         train_neural_differential_equation!(NN, NDEType, algorithm, coarse_training_datasets, T_scaling, wT_scaling,
-                                            iterations, opt, burn_in_epochs, history_filepath=nn_history_filepath, causal_penalty=causal_penalty)
+                                            iterations, opt, burn_in_epochs, history_filepath=nn_history_filepath)
     end
 end
 
-@info "Training the neural differential equation on the entire solution while decreasing the learning rate..."
+@info "Training the neural differential equation on the entire solution..."
 
 burn_in_iterations = 1:9:1153
 optimizers = [ADAM(1e-3)]
@@ -294,7 +290,7 @@ for opt in optimizers
     @info "Training free convection NDE with iterations=$burn_in_iterations for $full_epochs epochs with $(typeof(opt))(η=$(opt.eta))..."
     global NN
     NN = train_neural_differential_equation!(NN, NDEType, algorithm, coarse_training_datasets, T_scaling, wT_scaling,
-                                             burn_in_iterations, opt, full_epochs, history_filepath=nn_history_filepath, causal_penalty=causal_penalty)
+                                             burn_in_iterations, opt, full_epochs, history_filepath=nn_history_filepath)
 end
 
 
