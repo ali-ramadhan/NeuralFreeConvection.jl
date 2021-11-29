@@ -1,10 +1,23 @@
 using Statistics
 
+using ArgParse
 using JLD2
 using CairoMakie
 using FreeConvection
 
 using Flux.Losses: mse
+
+function parse_command_line_arguments()
+    settings = ArgParseSettings()
+
+    @add_arg_table! settings begin
+        "--output-directory"
+            help = "Output directory filepath."
+            arg_type = String
+    end
+
+    return parse_args(settings)
+end
 
 function plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solutions, T_scaling; filepath_prefix, normalize=false, alpha=0.3)
     epochs = length(nde_solutions[first(ids)])
@@ -13,7 +26,7 @@ function plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solution
     ax1 = fig[1, 1] = Axis(fig, xlabel="Epoch", ylabel="Mean squared error", yscale=log10)
 
     loss_histories = Dict(
-        id => [Flux.mse(T_scaling.(true_solutions[id].T), T_scaling.(nde_solutions[id][e].T)) for e in 1:epochs]
+        id => [mse(T_scaling.(true_solutions[id].T), T_scaling.(nde_solutions[id][e].T)) for e in 1:epochs]
         for id in ids
     )
 
@@ -41,13 +54,18 @@ function plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solution
 
     Legend(fig[1, 2], entries, labels, framevisible=false)
 
+    @info "Saving $filepath_prefix..."
     save(filepath_prefix * ".png", fig, px_per_unit=2)
     save(filepath_prefix * ".pdf", fig, pt_per_unit=2)
 
     return nothing
 end
 
-file = jldopen("solutions_and_history.jld2", "r")
+args = parse_command_line_arguments()
+output_dir = args["output-directory"]
+
+solutions_filepath = joinpath(output_dir, "solutions_and_history.jld2")
+file = jldopen(solutions_filepath, "r")
 
 true_solutions = file["true"]
 nde_solutions = file["nde_history"]
@@ -55,7 +73,7 @@ T_scaling = file["T_scaling"]
 
 ids = keys(nde_solutions) |> collect |> sort
 
-plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solutions, T_scaling, filepath_prefix="figure5_loss")
-plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solutions, T_scaling, filepath_prefix="figure5_loss_normalized", normalize=true)
+plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solutions, T_scaling, filepath_prefix=joinpath(output_dir, "figure5_loss"))
+plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solutions, T_scaling, filepath_prefix=joinpath(output_dir, "figure5_loss_normalized"), normalize=true)
 
 close(file)
