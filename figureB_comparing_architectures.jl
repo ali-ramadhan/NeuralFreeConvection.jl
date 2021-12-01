@@ -8,7 +8,7 @@ using FreeConvection
 using Flux.Losses: mse
 using CairoMakie.Makie: wong_colors
 
-function figureB_comparing_architecturess(ids, nde_solutions, true_solutions, T_scalings, labels; title, filepath_prefix)
+function figureB_comparing_architectures(ids, nde_solutions, true_solutions, T_scalings, labels; title, filepath_prefix)
     fig = Figure()
 
     ax = fig[1, 1] = Axis(fig, xlabel="Epoch", ylabel="Mean squared error", title=title, yscale=log10)
@@ -56,5 +56,5 @@ for ids in (1:9, 10:12, 13:15, 16:18, 19:21)
     title = simulation_label(first(ids))
     filepath_prefix="figureB_comparing_architectures_$title"
     @info "Plotting $filepath_prefix..."
-    figureB_comparing_architecturess(ids, nde_solutions, true_solutions, T_scalings, nn_archs; title, filepath_prefix)
+    figureB_comparing_architectures(ids, nde_solutions, true_solutions, T_scalings, nn_archs; title, filepath_prefix)
 end

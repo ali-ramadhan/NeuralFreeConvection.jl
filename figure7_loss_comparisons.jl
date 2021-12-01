@@ -29,7 +29,10 @@ function plot_figure7_loss_comparisons(datasets, nde_sols, kpp_sols, convective_
     colors = wong_colors()
     colors_alpha = wong_colors(alpha)
 
-    for (N, sub_ids) in enumerate((10:12, 16:18, 1:9, 13:15, 19:21))
+    # Ordered so that training subplot shows up at the bottom.
+    simulation_ids = (10:12, 16:18, 1:9, 13:15, 19:21)
+
+    for (N, sub_ids) in enumerate(simulation_ids)
         i = mod(N-1, cols) + 1
         j = div(N-1, cols) + 1
         ax = fig[i, j] = Axis(fig, title=simulation_label(sub_ids[1]), xlabel="Simulation time (days)", ylabel="Loss", yscale=log10)
