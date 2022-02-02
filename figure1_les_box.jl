@@ -1,18 +1,63 @@
-# Script credit: Andre Souza (https://github.com/sandreza)
+# Credit: This script is a modified version of another script developed by Andre Souza (https://github.com/sandreza)
 
-using JLD2 
-using GLMakie
 using Statistics
 using Printf
+
+using CairoMakie
+using Oceananigans
+
+filepath = "free_convection_19/3d_with_halos.jld2"
+ds = FieldDataset(filepath)
+
+n = time_index = 3
+
+fig = Figure()
+
+ax = fig[1, 1] = LScene(fig)
+
+clims = (19.6, 20)
+cmap = :blues
+
+Nx, Ny, Nz, Nt = size(ds["T"])
+Lx, Ly, Lz = length(ds["T"].grid)
+xc, yc, zc = nodes(ds["T"])
+T = interior(ds["T"])
+
+xc = range(0, Lx, length=Nx)
+yc = range(0, Ly, length=Ny)
+zc = range(-Lz, 0, length=Nz)
+
+T_west = T[1, :, :, n]
+T_east = T[Nx, :, :, n]
+T_south = T[:, 1, :, n]
+T_north = T[:, Ny, :, n]
+T_bottom = T[:, :, 1, n]
+T_top = T[:, :, Nz, n]
+
+surface!(ax, xc, zc, T_south,  transformation=(:xz,   0))#, colorrange=clims, colormap=cmap)
+surface!(ax, xc, zc, T_north,  transformation=(:xz,  Ly))#, colorrange=clims, colormap=cmap)
+
+surface!(ax, yc, zc, T_west,   transformation=(:yz,   0))#, colorrange=clims, colormap=cmap)
+surface!(ax, yc, zc, T_east,   transformation=(:yz,  Lx))#, colorrange=clims, colormap=cmap)
+
+surface!(ax, xc, yc, T_bottom, transformation=(:xy, -Lz))#, colorrange=clims, colormap=cmap)
+surface!(ax, xc, yc, T_top,    transformation=(:xy,   0))#, colorrange=clims, colormap=cmap)
+
+save("figure1_les_box.png", fig, px_per_unit=2)
+save("figure1_les_box.pdf", fig, pt_per_unit=2)
+
+error("Barrier!")
+
+#########################################################
 
 catke_jl_file = jldopen("catke_state.jld2", "r+")
 catke_t_keys = keys(catke_jl_file["timeseries"]["b"])
 
-# get slices: 
+# get slices:
 # bottom
 jl_file_bottom = jldopen("processed_highres_bottom.jld2", "r")
 t_keys_bottom = keys(jl_file_bottom["timeseries"]["b"])
-# top 
+# top
 jl_file_top = jldopen("processed_highres_top.jld2", "r")
 t_keys_top = keys(jl_file_top["timeseries"]["b"])
 # east
@@ -55,7 +100,7 @@ catke_Lz = catke_jl_file["grid"]["Lz"]
 ghost = 1
 catke_z = catke_jl_file["grid"]["zC"][ghost+1:catke_Nz+ghost]
 
-# get out slices 
+# get out slices
 fieldstring = "w"
 ϕ_top = @lift(jl_file_top["timeseries"][fieldstring][t_keys_averages[$time_node]][:,:,1])
 ϕ_bottom = @lift(jl_file_bottom["timeseries"][fieldstring][t_keys_averages[$time_node]][:,:,1])
@@ -123,7 +168,7 @@ GLMakie.scatter!(ax2, haverage2, catke_z)
 xlims!(ax2, xlims_b)
 
 ax2.xlabel = "Buoyancy [m/s²]"
-ax2.xlabelsize = 25 
+ax2.xlabelsize = 25
 
 ax3 = fig[2,4] = Axis(fig, title= "⟨e⟩")
 haverage4 = catke_e
@@ -133,7 +178,7 @@ GLMakie.scatter!(ax3, haverage4, catke_z)
 xlims!(ax3, (0, 2.5e-5))
 
 ax3.xlabel = "Turbulent Kinetic Energy [m²/s²]"
-ax3.xlabelsize = 25 
+ax3.xlabelsize = 25
 
 
 ax4 = fig[3,4] = Axis(fig, title= "⟨w'b'⟩")
@@ -148,14 +193,14 @@ GLMakie.scatter!(ax4, wb_catke, z_avg)
 
 xlims!(ax4, (-0.2e-8, 1.5e-8))
 ax4.xlabel = "Buoyancy Flux [m²/s³]"
-ax4.xlabelsize = 25 
+ax4.xlabelsize = 25
 
 for ax in [ax2, ax3, ax4]
     ax.titlesize = 40
     ax.ylabel = "Depth [m]"
-    ax.ylabelsize = 25 
+    ax.ylabelsize = 25
 end
-# 
+#
 Label(fig[4,2], @lift( "vertical velocity at day " * @sprintf("%1.1f ", jl_file_averages["timeseries"]["t"][t_keys[$time_node]] /86400  )), textsize = 50)
 Label(fig[4,4], "horizontal averages", textsize = 50)
 #=
@@ -164,7 +209,7 @@ ax.titlesize = 40
 ax.xlabel = "Latitude"
 ax.ylabel = "Stretched Height"
 ax.xlabelsize = 25
-ax.ylabelsize = 25 
+ax.ylabelsize = 25
 ax.xticks = ([-80, -60, -30, 0, 30, 60, 80], ["80S", "60S", "30S", "0", "30N", "60N", "80N"])
 =#
 rotate_cam!(fig.scene.children[1], (0, π/4, 0))
