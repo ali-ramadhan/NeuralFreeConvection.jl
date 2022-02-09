@@ -8,9 +8,6 @@ Lx = Ly = Lz = 1
 x = y = z = range(0, 1, length=N)
 data = [f(ix, iy, iz) for ix in x, iy in y, iz in z]
 
-one_coords = ones(N)
-zero_coords = zeros(N)
-
 rands = zeros(N, N) .+ 1e-6 * randn(N, N)
 
 cmap = :solar
