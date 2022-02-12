@@ -60,9 +60,6 @@ surface!(ax, xc, zc, rands_xz, color=T_north, transformation=(:xz, Ly); colormap
 surface!(ax, yc, zc, rands_yz, color=T_west,  transformation=(:yz,  0); colormap, colorrange)
 surface!(ax, yc, zc, rands_yz, color=T_east,  transformation=(:yz, Lx); colormap, colorrange)
 
-hidedecorations!(ax)
-
 display(fig)
 
-# save("figure1_les_box.png", fig, px_per_unit=2)
-# save("figure1_les_box.pdf", fig, pt_per_unit=2)
+save("figure1_les_box.png", fig, px_per_unit=2)
