@@ -1,29 +1,122 @@
+# Credit: This script is a modified version of another script developed by Andre Souza (https://github.com/sandreza)
+
+using Statistics
+using Printf
+using JLD2
 using GLMakie
-using ColorSchemes
 
-f(x, y, z) = x^2 + y^2 + z^2
 
-N = 10
-Lx = Ly = Lz = 1
-x = y = z = range(0, 1, length=N)
-data = [f(ix, iy, iz) for ix in x, iy in y, iz in z]
+filepath = "free_convection_19/3d.jld2"
+file = jldopen(filepath)
 
-rands = zeros(N, N) .+ 1e-6 * randn(N, N)
+n = time_index = 3
 
-cmap = :solar
-clims = (0, 3)
+Nx = file["grid/Nx"]
+Ny = file["grid/Ny"]
+Nz = file["grid/Nz"]
+Nt = file["timeseries/t"] |> keys |> length
 
-# Plot the bottom slice
-fig, ax, _ = surface(x, y, rands, color=data[:, :, 1], colormap=cmap, colorrange=clims)
+Lx = file["grid/Lx"]
+Ly = file["grid/Ly"]
+Lz = file["grid/Lz"]
 
-fig = Figure(resolution = (1920, 1080))
-ax = Axis3(fig[1, 1], xticks=range(0, Lx, length=5))
-surface!(ax, x, y, rands, color=data[:, :, 1], colormap=cmap, colorrange=clims)
+iterations = keys(file["timeseries/t"])
+T = cat([file["timeseries/T/$n"] for n in iterations]..., dims=4)
+w = cat([file["timeseries/w/$n"] for n in iterations]..., dims=4)
+wT = w[:, :, 1:end-1, :] .* T
 
-surface!(ax, x, y, Lz .+ rands, color=data[:, :, N], colormap=cmap, colorrange=clims)
-surface!(ax, x, z, rands, color=data[:, 1, :], transformation=(:xz,  0), colormap=cmap, colorrange=clims)
-surface!(ax, x, z, rands, color=data[:, N, :], transformation=(:xz, Ly), colormap=cmap, colorrange=clims)
-surface!(ax, y, z, rands, color=data[1, :, :], transformation=(:yz,  0), colormap=cmap, colorrange=clims)
-surface!(ax, y, z, rands, color=data[N, :, :], transformation=(:yz, Lx), colormap=cmap, colorrange=clims)
+xc = range(0, Lx, length=Nx)
+yc = range(0, Ly, length=Ny)
+zc = range(-Lz, 0, length=Nz)
+zf = range(-Lz, 0, length=Nz+1)
 
-display(fig)
+T_west = T[1, :, :, n]
+T_east = T[Nx, :, :, n]
+T_south = T[:, 1, :, n]
+T_north = T[:, Ny, :, n]
+T_bottom = T[:, :, 1, n]
+T_top = T[:, :, Nz, n]
+
+ε = 1e-6
+rands_xy = zeros(Nx, Ny) .+ ε * randn(Nx, Ny)
+rands_xz = zeros(Nx, Nz) .+ ε * randn(Nx, Nz)
+rands_yz = zeros(Ny, Nz) .+ ε * randn(Ny, Nz)
+
+colormap = :thermal
+colorrange = (19.9, 19.96)
+
+fig = Figure(resolution = (1200, 1000))
+
+aspect = :data
+
+xlabel = "x (m)"
+ylabel = "y (m)"
+zlabel = "z (m)"
+
+Δ = Lx/50
+xlims = (-Δ,  Lx+Δ)
+ylims = (-Δ,  Ly+Δ)
+zlims = (-Lz-Δ, Δ)
+
+xticks = range(0,  Lx, length=5)
+yticks = range(0,  Ly, length=5)
+zticks = range(-Lz, 0, length=5)
+
+ax = Axis3(fig[1, 1]; aspect, xlabel, ylabel, zlabel, xticks, yticks, zticks, xlims, ylims, zlims)
+
+surface!(ax, xc, yc, rands_xy, color=T_top; colormap, colorrange)
+surface!(ax, xc, yc, -Lz .+ rands_xy, color=T_bottom; colormap, colorrange)
+surface!(ax, xc, zc, rands_xz, color=T_south, transformation=(:xz,  0); colormap, colorrange)
+surface!(ax, xc, zc, rands_xz, color=T_north, transformation=(:xz, Ly); colormap, colorrange)
+surface!(ax, yc, zc, rands_yz, color=T_west,  transformation=(:yz,  0); colormap, colorrange)
+surface!(ax, yc, zc, rands_yz, color=T_east,  transformation=(:yz, Lx); colormap, colorrange)
+
+xlims!(ax, xlims)
+ylims!(ax, ylims)
+zlims!(ax, zlims)
+
+Colorbar(fig[1, 2], colormap=colormap, limits=colorrange)
+
+T_profile = mean(T[:, :, :, n], dims=(1, 2))
+ax = Axis(fig[1, 3], xlabel="Temperature (°C)", ylabel="z (m)", yticks=zticks, xgridvisible=false, ygridvisible=false)
+lines!(ax, T_profile[:], zc)
+ylims!(ax, -Lz, 0)
+# hidedecorations!(ax, grid=true)
+
+wT_west = wT[1, :, :, n]
+wT_east = wT[Nx, :, :, n]
+wT_south = wT[:, 1, :, n]
+wT_north = wT[:, Ny, :, n]
+wT_bottom = wT[:, :, 1, n]
+wT_top = wT[:, :, Nz, n]
+
+colormap = :balance
+colorrange = (-0.2, 0.2)
+
+ax = Axis3(fig[2, 1]; aspect, xlabel, ylabel, zlabel, xticks, yticks, zticks, xlims, ylims, zlims)
+
+surface!(ax, xc, yc, rands_xy, color=wT_top; colormap, colorrange)
+surface!(ax, xc, yc, -Lz .+ rands_xy, color=wT_bottom; colormap, colorrange)
+surface!(ax, xc, zc, rands_xz, color=wT_south, transformation=(:xz,  0); colormap, colorrange)
+surface!(ax, xc, zc, rands_xz, color=wT_north, transformation=(:xz, Ly); colormap, colorrange)
+surface!(ax, yc, zc, rands_yz, color=wT_west,  transformation=(:yz,  0); colormap, colorrange)
+surface!(ax, yc, zc, rands_yz, color=wT_east,  transformation=(:yz, Lx); colormap, colorrange)
+
+xlims!(ax, xlims)
+ylims!(ax, ylims)
+zlims!(ax, zlims)
+
+Colorbar(fig[2, 2], colormap=colormap, limits=colorrange)
+
+wT_profile = dropdims(mean(wT[:, :, :, n], dims=(1, 2)), dims=(1, 2))
+wT_profile[Nz] = file["parameters/temperature_flux"]
+wT_profile[Nz-1] = (wT_profile[Nz] + wT_profile[Nz-2]) / 2
+xticks = ([0, 2e-6, 4e-6], ["0", "2×10⁻⁶", "4×10⁻⁶"])
+ax = Axis(fig[2, 3], xlabel="Heat flux (m/s K)", ylabel="z (m)", xticks=xticks, yticks=zticks, xgridvisible=false, ygridvisible=false)
+lines!(ax, wT_profile, zc)
+ylims!(ax, -Lz, 0)
+
+colsize!(fig.layout, 1, Relative(2/3))
+
+# display(fig)
+save("figure1_les_box.png", fig, px_per_unit=2)
