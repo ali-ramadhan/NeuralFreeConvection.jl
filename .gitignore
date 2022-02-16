@@ -33,6 +33,7 @@ free_convection*/
 *.png
 *.txt
 *.pdf
+*.svg
 
 # Slurm scripts
 *.slurm
