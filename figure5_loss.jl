@@ -23,7 +23,7 @@ function plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solution
     epochs = length(nde_solutions[first(ids)])
 
     fig = Figure()
-    ax1 = fig[1, 1] = Axis(fig, xlabel="Epoch", ylabel="Mean squared error", yscale=log10)
+    ax = Axis(fig[1, 1], xlabel="Epoch", ylabel="Loss function", yscale=log10, xgridvisible=false, ygridvisible=false)
 
     loss_histories = Dict(
         id => [mse(T_scaling.(true_solutions[id].T), T_scaling.(nde_solutions[id][e].T)) for e in 1:epochs]
@@ -42,10 +42,12 @@ function plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solution
             mean_loss_training ./= normalization_factor
         end
 
-        band!(ax1, 1:epochs, min_loss_training, max_loss_training, color=simulation_color(sub_ids[1]; alpha))
-        lines!(ax1, 1:epochs, mean_loss_training, color=simulation_color(sub_ids[1]))
+        band!(ax, 1:epochs, min_loss_training, max_loss_training, color=simulation_color(sub_ids[1]; alpha))
+        lines!(ax, 1:epochs, mean_loss_training, color=simulation_color(sub_ids[1]))
     end
 
+    xticks = 0:100:500
+    ax.xticks = (xticks, string.(xticks))
     xlims!(0, epochs)
 
     entry_ids = (1, 10, 13, 16, 19)
