@@ -11,6 +11,7 @@ using Flux
 using JLD2
 using OrdinaryDiffEq
 using Zygote
+using CairoMakie
 
 using Oceananigans
 using OceanParameterizations
@@ -105,6 +106,10 @@ NN = Chain(Dense(Nz, 4Nz, relu),
            Dense(4Nz, 4Nz, relu),
            Dense(4Nz, Nz-1))
 
+for p in params(NN)
+    p .*= 1e-5
+end
+
 function free_convection_neural_network(input)
     wT_interior = NN(input.temperature)
     wT = cat(input.bottom_flux, wT_interior, input.top_flux, dims=1)
@@ -123,13 +128,11 @@ coarse_training_datasets = data.coarse_training_datasets
 if use_convective_adjustment
     @info "Computing convective adjustment solutions and fluxes (and missing fluxes)..."
 
-    for (id, ds) in coarse_training_datasets
+    for (id, ds) in data.coarse_datasets
         sol = oceananigans_convective_adjustment(ds; output_dir)
 
         grid = ds["T"].grid
         times = ds["T"].times
-
-        # ds.fields["wT"].data .+= ds.fields["κₑ_∂z_T"].data
 
         ds.fields["T_param"] = FieldTimeSeries(grid, (Center, Center, Center), times, ArrayType=Array{Float32})
         ds.fields["wT_param"] = FieldTimeSeries(grid, (Center, Center, Face), times, ArrayType=Array{Float32})
@@ -138,7 +141,7 @@ if use_convective_adjustment
         ds.fields["T_param"][1, 1, :, :] .= sol.T
         ds.fields["wT_param"][1, 1, :, :] .= sol.wT
 
-        ds.fields["wT_missing"].data .= ds.fields["wT"].data .- ds.fields["wT_param"].data
+        ds.fields["wT_missing"].data .= ds.fields["wT"].data .- ds.fields["κₑ_∂z_T"].data .- ds.fields["wT_param"].data
     end
 end
 
@@ -175,11 +178,27 @@ wT_scaling = ZeroMeanUnitVarianceScaling(wT_training_data)
 input_training_data = [rescale(i, T_scaling, wT_scaling) for i in input_training_data]
 output_training_data = wT_scaling.(output_training_data)
 
+training_data = [(input_training_data[n], output_training_data[:, n]) for n in 1:length(input_training_data)] |> shuffle
+
+
+@info "Removing outliers from training data..."
+
+nn_loss(input, output) = Flux.Losses.mse(free_convection_neural_network(input), output)
+
+# We will remove training dat with loss > max_loss since they pollute the mean.
+max_loss = 1
+
+losses₀ = [nn_loss(input, output) for (input, output) in training_data]
+outliers = losses₀ .> max_loss
+n_outliers = count(outliers)
+training_data = training_data[.!outliers]
+
+@info @sprintf("Removed %d/%d (%.2f%%) of the training data.", n_outliers, length(losses₀), 100 * n_outliers/length(losses₀))
+
 
 @info "Batching training data..."
 
-n_training_data = length(input_training_data)
-training_data = [(input_training_data[n], output_training_data[:, n]) for n in 1:n_training_data] |> shuffle
+n_training_data = length(training_data)
 data_loader = Flux.Data.DataLoader(training_data, batchsize=n_training_data, shuffle=true)
 
 n_obs = data_loader.nobs
@@ -189,8 +208,6 @@ n_batches = ceil(Int, n_obs / batch_size)
 
 
 @info "Training neural network on fluxes: ⟨T⟩(z) -> ⟨w′T′⟩(z) mapping..."
-
-nn_loss(input, output) = Flux.mse(free_convection_neural_network(input), output)
 
 nn_training_set_loss(training_data) = mean(nn_loss(input, output) for (input, output) in training_data)
 
@@ -206,15 +223,17 @@ function nn_callback()
     return mean_loss, median_loss
 end
 
-optimizers = [ADAM(1e-4)]
 history_filepath = joinpath(output_dir, "neural_network_trained_on_fluxes_history.jld2")
 
+optimizers = [ADAM()]
 for opt in optimizers, e in 1:epochs, (i, mini_batch) in enumerate(data_loader)
     @info "Training heat flux neural network with $(typeof(opt))(η=$(opt.eta))... (epoch $e/$epochs, mini-batch $i/$n_batches)"
-    Flux.train!(nn_loss, Flux.params(NN), mini_batch, opt, cb=Flux.throttle(nn_callback, 5))
+
+    # Flux.train!(nn_loss, Flux.params(NN), mini_batch, opt)
+    Flux.train!(nn_training_set_loss, Flux.params(NN), [training_data], opt)
 
     mean_loss, median_loss = nn_callback()
-    inscribe_history(history_filepath, NN, median_loss)
+    inscribe_history(history_filepath, e, neural_network=NN; mean_loss, median_loss)
 end
 
 
@@ -227,4 +246,76 @@ jldopen(nn_filepath, "w") do file
     file["neural_network"] = NN
     file["T_scaling"] = T_scaling
     file["wT_scaling"] = wT_scaling
+end
+
+
+@info "Plotting loss history..."
+
+file = jldopen(history_filepath, "r")
+
+mean_losses = [file["mean_loss/$e"] for e in 1:epochs]
+median_losses = [file["median_loss/$e"] for e in 1:epochs]
+
+close(file)
+
+begin
+    fig = Figure()
+    ax = Axis(fig[1, 1], xlabel="Epochs", ylabel="Loss")
+    lines!(ax, 1:epochs, mean_losses, label="mean")
+    lines!(ax, 1:epochs, median_losses, label="median")
+    axislegend(ax, position=:rt)
+    filepath = joinpath(output_dir, "loss_history_trained_on_fluxes.png")
+    save(filepath, fig, px_per_unit=2)
+end
+
+
+@info "Animating learned fluxes..."
+
+function animate_fluxes(ds, NN, T_scaling, wT_scaling; filepath, title="", framerate=15)
+    T = interior(ds["T"])
+    wT = interior(ds["wT"])
+    wT_les = interior(ds["κₑ_∂z_T"])
+    wT_param = interior(ds["wT_param"])
+    wT_missing = interior(ds["wT_missing"])
+
+    wT_min = minimum(quantile(x[:], 0.02) for x in (wT, wT_les, wT_param, wT_missing))
+    wT_max = maximum(quantile(x[:], 0.98) for x in (wT, wT_les, wT_param, wT_missing))
+
+    Nz = size(wT, 3) - 1
+    Nt = size(wT, 4)
+    zf = znodes(ds["wT"])
+
+    fig = Figure(resolution=(600, 800))
+    ax = Axis(fig[1, 1], title=title, xlabel="heat flux", ylabel="z (m)")
+
+    n = Observable(1)
+
+    wT_n = @lift wT[1, 1, :, $n]
+    wT_les_n = @lift -wT_les[1, 1, :, $n]
+    wT_total_n = @lift wT[1, 1, :, $n] - wT_les[1, 1, :, $n]
+    wT_param_n = @lift wT_param[1, 1, :, $n]
+    wT_missing_n = @lift wT_missing[1, 1, :, $n]
+    wT_missing_NN_n = @lift T[1, 1, :, $n] |> T_scaling |> NN |> inv(wT_scaling)
+
+    lines!(ax, wT_n, zf, label="wT")
+    lines!(ax, wT_les_n, zf, label="LES")
+    lines!(ax, wT_total_n, zf, label="wT + LES")
+    lines!(ax, wT_param_n, zf, label="param")
+    lines!(ax, wT_missing_n, zf, label="missing")
+    lines!(ax, wT_missing_NN_n, zf[2:end-1], label="NN")
+
+    xlims!(ax, (wT_min - abs(wT_min), wT_max + 0.1 * abs(wT_max)))
+    ylims!(ax, (zf[1], zf[end]))
+
+    axislegend(ax, position=:rb)
+
+    record(fig, filepath, 1:Nt; framerate) do time_index
+        @info "Animating $filepath frame $time_index/$Nt..."
+        n[] = time_index
+    end
+end
+
+for (id, ds) in data.coarse_datasets
+    filepath = joinpath(output_dir, "animating_fluxes_simulation$id.mp4")
+    animate_fluxes(ds, NN, T_scaling, wT_scaling; filepath)
 end
