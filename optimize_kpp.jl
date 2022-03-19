@@ -1,6 +1,7 @@
 using Statistics
 using Printf
 
+using JLD2
 using BlackBoxOptim
 using OceanTurb
 using FreeConvection
@@ -50,4 +51,14 @@ end
 # initial_guess = [0.1, 4.0, 0.5, 1.5]
 initial_guess = [1.0, 4.0, 0.5, 3.0]
 search_range = [(0.0, 1.0), (0.0, 8.0), (0.0, 8.0), (0.0, 8.0)]
-res = bboptimize(kpp_training_simulations, initial_guess; SearchRange=search_range, NumDimensions=4, MaxTime=24*3600)
+res = bboptimize(kpp_training_simulations, initial_guess; SearchRange=search_range, NumDimensions=4, MaxTime=16*3600)
+
+@show best_candidate(res)
+@show best_fitness(res)
+
+initial_fitness = kpp_training_simulations(initial_guess)
+@info "best_fitness/initial_fitness = $initial_fitness/$(best_fitness(res)) = $(initial_fitness/best_fitness(res))"
+
+jldopen("kpp_optimal_parameters.jld2", "w") do file
+    file["result"] = res
+end
