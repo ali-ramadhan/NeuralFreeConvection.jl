@@ -2,6 +2,7 @@ using Statistics
 using Printf
 using JLD2
 using Flux
+using BenchmarkTools
 using CairoMakie
 using FreeConvection
 
@@ -27,9 +28,9 @@ datasets = data.coarse_datasets
 function run_convective_adjustment_on_datasets(datasets, NN, T_scaling, wT_scaling, K_CA)
     nde_params = Dict(id => ConvectiveAdjustmentNDEParameters(ds, T_scaling, wT_scaling, K_CA) for (id, ds) in datasets)
 
-    t₀ = time_ns()
     ca_solutions = Dict(id => solve_nde(ds, NN, ConvectiveAdjustmentNDE, nde_params[id], ROCK4(), T_scaling, wT_scaling) for (id, ds) in datasets)
-    runtime = (time_ns() - t₀) * 1e-9
+    b = @benchmark Dict(id => solve_nde(ds, $NN, ConvectiveAdjustmentNDE, $nde_params[id], ROCK4(), $T_scaling, $wT_scaling) for (id, ds) in $datasets)
+    runtime = median(b).time / 1e9
 
     function true_T_solution(ds)
         _, _, Nz, _ = size(ds["T"])
@@ -80,6 +81,9 @@ begin
     ax2 = Axis(fig[2, 1], xlabel="K_CA", ylabel="Runtime (seconds)", xscale=log10)
     lines!(ax2, K_CAs, runtimes)
     vlines!(ax2, best_K_CA, color=(:red, 0.5))
+
+    xlims!(ax1, (K_CAs[1], K_CAs[end]))
+    xlims!(ax2, (K_CAs[1], K_CAs[end]))
 
     save("figureC_optimal_convective_adjustment_parameter.png", fig, px_per_unit=2)
 end
