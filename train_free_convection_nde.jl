@@ -11,6 +11,7 @@ using Flux
 using JLD2
 using OrdinaryDiffEq
 using Zygote
+using CairoMakie
 
 using Oceananigans
 using OceanParameterizations
@@ -49,7 +50,7 @@ function parse_command_line_arguments()
             range_tester = (id -> id in FreeConvection.SIMULATION_IDS)
 
         "--burn-in-epochs"
-            help = "Number of epochs to train on the partial time series."
+            help = "Number of epocepochshs to train on the partial time series."
             default = 0
             arg_type = Int
 
@@ -154,10 +155,8 @@ else
     @error "Invalid neural network architecture: $nn_architecture"
 end
 
-function free_convection_neural_network(input)
-    wT_interior = NN(input.temperature)
-    wT = cat(input.bottom_flux, wT_interior, input.top_flux, dims=1)
-    return wT
+for p in params(NN)
+    p .*= 1e-5
 end
 
 
@@ -172,7 +171,7 @@ coarse_datasets = data.coarse_datasets
 
 @info "Computing convective adjustment solutions and fluxes (and missing fluxes)..."
 
-for (id, ds) in coarse_training_datasets
+for (id, ds) in coarse_datasets
     sol = oceananigans_convective_adjustment(ds; output_dir)
 
     grid = ds["T"].grid
@@ -221,54 +220,9 @@ input_training_data = [rescale(i, T_scaling, wT_scaling) for i in input_training
 output_training_data = wT_scaling.(output_training_data)
 
 
-@info "Batching training data..."
-
-n_training_data = length(input_training_data)
-training_data = [(input_training_data[n], output_training_data[:, n]) for n in 1:n_training_data] |> shuffle
-data_loader = Flux.Data.DataLoader(training_data, batchsize=n_training_data, shuffle=true)
-
-n_obs = data_loader.nobs
-batch_size = data_loader.batchsize
-n_batches = ceil(Int, n_obs / batch_size)
-@info "Training data loader contains $n_obs pairs of observations (batch size = $batch_size)."
-
-
-@info "Training neural network on fluxes: ⟨T⟩(z) -> ⟨w′T′⟩(z) mapping..."
-
-nn_loss(input, output) = Flux.mse(free_convection_neural_network(input), output)
-
-nn_training_set_loss(training_data) = mean(nn_loss(input, output) for (input, output) in training_data)
-
-function nn_callback()
-    μ_loss = nn_training_set_loss(training_data)
-    @info @sprintf("Training free convection neural network... training set MSE loss: μ_loss::%s = %.10e", typeof(μ_loss), μ_loss)
-    return μ_loss
-end
-
-epochs = 10
-optimizers = [ADAM(), Descent(1e-2)]
-
-for opt in optimizers, e in 1:epochs, (i, mini_batch) in enumerate(data_loader)
-    @info "Training heat flux neural network with $(typeof(opt))(η=$(opt.eta))... (epoch $e/$epochs, mini-batch $i/$n_batches)"
-    Flux.train!(nn_loss, Flux.params(NN), mini_batch, opt, cb=Flux.throttle(nn_callback, 5))
-end
-
-
-@info "Saving initial neural network weights to disk..."
-
-initial_nn_filepath = joinpath(output_dir, "free_convection_initial_neural_network.jld2")
-
-jldopen(initial_nn_filepath, "w") do file
-    file["grid_points"] = Nz
-    file["neural_network"] = NN
-    file["T_scaling"] = T_scaling
-    file["wT_scaling"] = wT_scaling
-end
-
-
 @info "Training neural differential equation on incrementally increasing time spans..."
 
-nn_history_filepath = joinpath(output_dir, "neural_network_history.jld2")
+history_filepath = joinpath(output_dir, "neural_network_history_trained_on_timeseries.jld2")
 
 if burn_in_epochs > 0
     training_iterations = (1:20, 1:5:101, 1:10:201, 1:20:401, 1:40:801)
@@ -277,28 +231,38 @@ if burn_in_epochs > 0
     for iterations in training_iterations
         @info "Training free convection NDE with iterations=$iterations for $burn_in_epochs epochs  with $(typeof(opt))(η=$(opt.eta))..."
         train_neural_differential_equation!(NN, NDEType, algorithm, coarse_training_datasets, T_scaling, wT_scaling,
-                                            iterations, opt, burn_in_epochs, history_filepath=nn_history_filepath)
+                                            iterations, opt, burn_in_epochs, history_filepath=history_filepath)
     end
 end
 
+
 @info "Training the neural differential equation on the entire solution..."
 
-burn_in_iterations = 1:9:1153
-optimizers = [ADAM(1e-3)]
+K_CA = 2  # Optimal value from optimize_convective_adujstment.jl
+nde_params = Dict(id => ConvectiveAdjustmentNDEParameters(ds, T_scaling, wT_scaling, K_CA) for (id, ds) in data.coarse_datasets)
+
+training_iterations = 1:9:1153
+optimizers = [ADAM()]
 
 for opt in optimizers
-    @info "Training free convection NDE with iterations=$burn_in_iterations for $full_epochs epochs with $(typeof(opt))(η=$(opt.eta))..."
+    @info "Training free convection NDE with iterations=$training_iterations for $full_epochs epochs with $(typeof(opt))(η=$(opt.eta))..."
+
     global NN
-    NN = train_neural_differential_equation!(NN, NDEType, algorithm, coarse_training_datasets, T_scaling, wT_scaling,
-                                             burn_in_iterations, opt, full_epochs, history_filepath=nn_history_filepath)
+    t₀ = time_ns()
+
+    NN = train_neural_differential_equation!(NN, NDEType, nde_params, algorithm, coarse_training_datasets, T_scaling,
+                                             training_iterations, opt, full_epochs; history_filepath)
+
+    runtime = (time_ns() - t₀) * 1e-9
+    inscribe_history(history_filepath, 1; runtime)
 end
 
 
 @info "Saving trained neural network weights to disk..."
 
-trained_nn_filepath = joinpath(output_dir, "free_convection_trained_neural_network.jld2")
+nn_filepath = joinpath(output_dir, "neural_network_trained_on_timeseries.jld2")
 
-jldopen(trained_nn_filepath, "w") do file
+jldopen(nn_filepath, "w") do file
     file["grid_points"] = Nz
     file["neural_network"] = NN
     file["T_scaling"] = T_scaling
@@ -306,46 +270,127 @@ jldopen(trained_nn_filepath, "w") do file
 end
 
 
-@info "Gathering and computing solutions..."
+@info "Plotting loss history..."
 
-initial_nn_filepath = joinpath(output_dir, "free_convection_initial_neural_network.jld2")
+file = jldopen(history_filepath, "r")
 
-file = jldopen(initial_nn_filepath, "r")
-initial_NN = file["neural_network"]
+mean_losses = [file["mean_loss/$e"] for e in 1:full_epochs]
+
 close(file)
 
-true_solutions = Dict(id => (T=interior(ds["T"])[1, 1, :, :], wT=interior(ds["wT"])[1, 1, :, :]) for (id, ds) in coarse_datasets)
-nde_solutions = Dict(id => solve_nde(ds, NN, NDEType, algorithm, T_scaling, wT_scaling) for (id, ds) in coarse_datasets)
-kpp_solutions = Dict(id => free_convection_kpp(ds) for (id, ds) in coarse_datasets)
-tke_solutions = Dict(id => free_convection_tke_mass_flux(ds) for (id, ds) in coarse_datasets)
-initial_nde_solutions = Dict(id => solve_nde(ds, initial_NN, NDEType, algorithm, T_scaling, wT_scaling) for (id, ds) in coarse_datasets)
-
-convective_adjustment_solutions = Dict(id => oceananigans_convective_adjustment(ds; output_dir) for (id, ds) in coarse_datasets)
-oceananigans_solutions = Dict(id => oceananigans_convective_adjustment_with_neural_network(ds, output_dir=output_dir, nn_filepath=trained_nn_filepath) for (id, ds) in coarse_datasets)
-
-
-@info "Computing NDE solution history..."
-
-nde_solution_history = compute_nde_solution_history(coarse_datasets, NDEType, algorithm, trained_nn_filepath, nn_history_filepath)
-
-
-@info "Saving solutions to JLD2..."
-
-solutions_filepath = joinpath(output_dir, "solutions_and_history.jld2")
-
-jldopen(solutions_filepath, "w") do file
-    file["grid_points"] = Nz
-    file["neural_network"] = NN
-    file["T_scaling"] = T_scaling
-    file["wT_scaling"] = wT_scaling
-
-    file["true"] = true_solutions
-    file["nde"] = nde_solutions
-    file["kpp"] = kpp_solutions
-    file["tke"] = tke_solutions
-    file["initial_nde"] = initial_nde_solutions
-    file["convective_adjustment"] = convective_adjustment_solutions
-    file["oceananigans"] = oceananigans_solutions
-
-    file["nde_history"] = nde_solution_history
+begin
+    fig = Figure()
+    ax = Axis(fig[1, 1], yscale=log10, xlabel="Epochs", ylabel="Loss")
+    lines!(ax, 1:full_epochs, mean_losses)
+    xlims!(ax, (0, full_epochs))
+    filepath = joinpath(output_dir, "loss_history_trained_on_timeseries.png")
+    save(filepath, fig, px_per_unit=2)
 end
+
+
+@info "Computing flux history for each simulation..."
+
+flux_history, flux_loss_history = compute_nn_flux_prediction_history(data.coarse_datasets, nn_filepath, history_filepath)
+
+jldopen(history_filepath, "a") do file
+    file["flux_history"] = flux_history
+    file["flux_loss_history"] = flux_loss_history
+end
+
+
+@info "Plotting flux loss history for each simulation...."
+
+begin
+    fig = Figure()
+    ax = Axis(fig[1, 1], yscale=log10, title="Flux loss history on training simulations", xlabel="Epochs", ylabel="MSE loss (fluxes)")
+    for id in 1:9
+        lines!(mean(flux_loss_history[id], dims=2)[:], label="$id")
+    end
+    xlims!(ax, (0, full_epochs))
+    Legend(fig[1, 2], ax, "simulation", framevisible=false)
+
+    filepath = joinpath(output_dir, "flux_loss_history_trained_on_timeseries_training.png")
+    save(filepath, fig, px_per_unit=2)
+
+    fig = Figure()
+    ax = Axis(fig[1, 1], yscale=log10, title="Flux loss history on validation simulations", xlabel="Epochs", ylabel="MSE loss (fluxes)")
+    for id in 10:21
+        lines!(mean(flux_loss_history[id], dims=2)[:], label="$id")
+    end
+    xlims!(ax, (0, full_epochs))
+    Legend(fig[1, 2], ax, "simulation", framevisible=false)
+
+    filepath = joinpath(output_dir, "flux_loss_history_trained_on_timeseries_validation.png")
+    save(filepath, fig, px_per_unit=2)
+end
+
+
+@info "Computing NDE solution and loss history for each simulation..."
+
+K_CA = 2  # Optimal value from optimize_convective_adujstment.jl
+nde_params = Dict(id => ConvectiveAdjustmentNDEParameters(ds, T_scaling, wT_scaling, K_CA) for (id, ds) in data.coarse_datasets)
+solution_history, solution_loss_history = compute_nde_solution_history(data.coarse_datasets, ConvectiveAdjustmentNDE, nde_params, ROCK4(), nn_filepath, history_filepath)
+
+jldopen(history_filepath, "a") do file
+    file["solution_history"] = solution_history
+    file["solution_loss_history"] = solution_loss_history
+end
+
+
+@info "Plotting solution loss history for each simulation...."
+
+begin
+    fig = Figure()
+    ax = Axis(fig[1, 1], yscale=log10, title="Solution loss history on training simulations", xlabel="Epochs", ylabel="MSE loss (time series)")
+    for id in 1:9
+        lines!(mean(solution_loss_history[id], dims=2)[:], label="$id")
+    end
+    xlims!(ax, (0, full_epochs))
+    Legend(fig[1, 2], ax, "simulation", framevisible=false)
+
+    filepath = joinpath(output_dir, "solution_loss_history_trained_on_timeseries_training.png")
+    save(filepath, fig, px_per_unit=2)
+
+    fig = Figure()
+    ax = Axis(fig[1, 1], yscale=log10, title="Solution loss history on validation simulations", xlabel="Epochs", ylabel="MSE loss (time series)")
+    for id in 10:21
+        lines!(mean(solution_loss_history[id], dims=2)[:], label="$id")
+    end
+    xlims!(ax, (0, full_epochs))
+    Legend(fig[1, 2], ax, "simulation", framevisible=false)
+
+    filepath = joinpath(output_dir, "solution_loss_history_trained_on_timeseries_validation.png")
+    save(filepath, fig, px_per_unit=2)
+end
+
+
+# @info "Gathering and computing solutions..."
+
+# true_solutions = Dict(id => (T=interior(ds["T"])[1, 1, :, :], wT=interior(ds["wT"])[1, 1, :, :]) for (id, ds) in coarse_datasets)
+# nde_solutions = Dict(id => solve_nde(ds, NN, NDEType, algorithm, T_scaling, wT_scaling) for (id, ds) in coarse_datasets)
+# kpp_solutions = Dict(id => free_convection_kpp(ds) for (id, ds) in coarse_datasets)
+# tke_solutions = Dict(id => free_convection_tke_mass_flux(ds) for (id, ds) in coarse_datasets)
+
+# convective_adjustment_solutions = Dict(id => oceananigans_convective_adjustment(ds; output_dir) for (id, ds) in coarse_datasets)
+# oceananigans_solutions = Dict(id => oceananigans_convective_adjustment_with_neural_network(ds, output_dir=output_dir, nn_filepath=nn_filepath) for (id, ds) in coarse_datasets)
+
+
+# @info "Saving solutions to JLD2..."
+
+# solutions_filepath = joinpath(output_dir, "solutions_and_history.jld2")
+
+# jldopen(solutions_filepath, "w") do file
+#     file["grid_points"] = Nz
+#     file["neural_network"] = NN
+#     file["T_scaling"] = T_scaling
+#     file["wT_scaling"] = wT_scaling
+
+#     file["true"] = true_solutions
+#     file["nde"] = nde_solutions
+#     file["kpp"] = kpp_solutions
+#     file["tke"] = tke_solutions
+#     file["convective_adjustment"] = convective_adjustment_solutions
+#     file["oceananigans"] = oceananigans_solutions
+
+#     file["nde_history"] = nde_solution_history
+# end

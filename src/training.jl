@@ -31,11 +31,9 @@ function dense_spatial_causality_train!(loss, ps, data, opt; cb = () -> ())
 
 end
 
-function train_neural_differential_equation!(NN, NDEType, algorithm, datasets, T_scaling, wT_scaling, iterations, opt, epochs; history_filepath=nothing)
-
+function train_neural_differential_equation!(NN, NDEType, nde_params, algorithm, datasets, T_scaling, iterations, opt, epochs; history_filepath=nothing)
     ids = [id for id in keys(datasets)] |> sort
 
-    nde_params = Dict(id => FreeConvectionNDEParameters(datasets[id], T_scaling, wT_scaling) for id in ids)
     T₀ = Dict(id => T_scaling.(interior(datasets[id]["T"])[1, 1, :, 1]) for id in ids)
     ndes = Dict(id => NDEType(NN, datasets[id]; iterations) for id in ids)
 
@@ -46,20 +44,26 @@ function train_neural_differential_equation!(NN, NDEType, algorithm, datasets, T
 
     function nde_loss(weights, extra_params)
         nde_sols = cat([solve(ndes[id], algorithm, reltol=1e-4, u0=T₀[id], p=[weights; nde_params[id]], sense=InterpolatingAdjoint(autojacvec=ZygoteVJP(), checkpointing=true)) |> Array for id in ids]..., dims=2)
-        return Flux.mse(nde_sols, true_sols)
+        return Flux.Losses.mse(nde_sols, true_sols)
     end
+
+    current_epoch = 1
 
     function nde_callback(weights, extra_params)
         mse_loss = nde_loss(weights, extra_params)
-        @info @sprintf("Training free convection NDE... MSE loss: μ_loss::%s = %.12e", typeof(mse_loss), mse_loss)
+
+        @info @sprintf("Training free convection NDE epoch %d/%d... MSE loss: μ_loss::%s = %.12e",
+                       current_epoch, epochs, typeof(mse_loss), mse_loss)
+
         NN = reconstruct(weights)
-        inscribe_history(history_filepath, NN, mse_loss)
+        inscribe_history(history_filepath, current_epoch, neural_network=NN, mean_loss=mse_loss)
+        current_epoch += 1
         return false
     end
 
     nde_loss_galactic = OptimizationFunction(nde_loss, GalacticOptim.AutoZygote())
     prob = OptimizationProblem(nde_loss_galactic, weights, [])
-    sol = solve(prob, ADAM(), cb=nde_callback, maxiters=epochs)
+    sol = solve(prob, opt, cb=nde_callback, maxiters=epochs)
 
     weights_final = sol.minimizer
     NN_final = reconstruct(weights_final)

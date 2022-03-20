@@ -28,11 +28,11 @@ function ConvectiveAdjustmentNDE(NN, ds; iterations=nothing)
 
         ∂T/∂t = - σ_wT/σ_T * τ/H * ∂/∂z(wT - K ∂T/∂z)
 
-    where K = 0 if ∂T/∂z < 0 and K = 100 if ∂T/∂z > 0.
+    where K = 0 if ∂T/∂z < 0 and K = K_CA if ∂T/∂z > 0.
     """
     function ∂T∂t(T, p, t)
-        weights = p[1:end-6]
-        bottom_flux, top_flux, σ_T, σ_wT, H, τ = p[end-5:end]
+        weights = p[1:end-7]
+        bottom_flux, top_flux, σ_T, σ_wT, H, τ, K_CA = p[end-6:end]
 
         # Turbulent heat flux
         NN = reconstruct(weights)
@@ -42,7 +42,7 @@ function ConvectiveAdjustmentNDE(NN, ds; iterations=nothing)
 
         # Convective adjustment
         ∂T∂z = Dzᶠ * T
-        ∂z_K∂T∂z = Dzᶜ * min.(0, 10 * ∂T∂z)
+        ∂z_K∂T∂z = Dzᶜ * min.(0, K_CA * ∂T∂z)
 
         return σ_wT/σ_T * τ/H * (- ∂z_wT .+ ∂z_K∂T∂z)
     end
@@ -54,4 +54,19 @@ function ConvectiveAdjustmentNDE(NN, ds; iterations=nothing)
     # We set the initial condition to `nothing`. Then we will set it to some actual initial condition when calling `solve`.
     ff = ODEFunction{false}(∂T∂t, tgrad=DiffEqFlux.basic_tgrad)
     return ODEProblem{false}(ff, nothing, tspan, saveat=saveat)
+end
+
+function ConvectiveAdjustmentNDEParameters(ds, T_scaling, wT_scaling, K_CA)
+    wT = ds["wT"]
+    zf = znodes(wT)
+    times = wT.times
+
+    H = abs(zf[1]) # Domain depth/height
+    τ = times[end]  # Simulation length
+
+    bottom_flux = wT_scaling(interior(wT)[1, 1, 1, 1])
+    top_flux = wT_scaling(ds.metadata["temperature_flux"])
+
+    FT = eltype(wT)
+    return FT.([bottom_flux, top_flux, T_scaling.σ, wT_scaling.σ, H, τ, K_CA])
 end

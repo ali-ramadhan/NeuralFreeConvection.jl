@@ -11,14 +11,15 @@ export
     FreeConvectionTrainingDataInput, rescale, wrangle_input_training_data, wrangle_output_training_data,
 
     # Neural differential equations
-    FreeConvectionNDE, ConvectiveAdjustmentNDE, FreeConvectionNDEParameters, train_neural_differential_equation!, solve_nde,
+    FreeConvectionNDE, ConvectiveAdjustmentNDE, FreeConvectionNDEParameters, ConvectiveAdjustmentNDEParameters,
+    train_neural_differential_equation!, solve_nde, inscribe_history,
 
     # Testing and comparisons
     oceananigans_convective_adjustment, oceananigans_convective_adjustment_with_neural_network,
     free_convection_kpp, free_convection_tke_mass_flux, optimize_kpp_parameters,
 
     # Testing
-    compute_nde_solution_history,
+    compute_nn_flux_prediction_history, compute_nde_solution_history,
     plot_epoch_loss, plot_epoch_loss_summary, plot_epoch_loss_summary_filled_curves,
     animate_nde_loss, plot_comparisons,
     plot_loss_matrix, plot_loss_matrix_filled_curves,

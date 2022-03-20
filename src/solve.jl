@@ -5,7 +5,7 @@ function solve_nde(nde, NN, T₀, alg, nde_params)
                  sense=InterpolatingAdjoint(autojacvec=ZygoteVJP(), checkpointing=true))
 end
 
-function solve_nde(ds, NN, NDEType, algorithm, T_scaling, wT_scaling; T₀=nothing)
+function solve_nde(ds, NN, NDEType, nde_params, algorithm, T_scaling, wT_scaling; T₀=nothing)
 
     T = ds["T"]
     wT = ds["wT"]
@@ -18,7 +18,6 @@ function solve_nde(ds, NN, NDEType, algorithm, T_scaling, wT_scaling; T₀=nothi
     Δẑ = diff(zc)[1] / H  # Non-dimensional grid spacing
     Dzᶠ = Dᶠ(Nz, Δẑ) # Differentiation matrix operator
 
-    nde_params = FreeConvectionNDEParameters(ds, T_scaling, wT_scaling)
     nde = NDEType(NN, ds)
 
     if isnothing(T₀)
@@ -28,6 +27,7 @@ function solve_nde(ds, NN, NDEType, algorithm, T_scaling, wT_scaling; T₀=nothi
     T = solve_nde(nde, NN, T₀, algorithm, nde_params) |> Array
 
     bottom_flux, top_flux, _ = nde_params
+    K_CA = nde_params[7]
 
     Nz, Nt = size(T)
     wT = zeros(Nz+1, Nt)
@@ -42,7 +42,7 @@ function solve_nde(ds, NN, NDEType, algorithm, T_scaling, wT_scaling; T₀=nothi
             @. wT[:, n] = wT_NN_n
         elseif NDEType == ConvectiveAdjustmentNDE
             ∂T∂z_n = Dzᶠ * T_n
-            K∂T∂z_n = min.(0, 10 * ∂T∂z_n)
+            K∂T∂z_n = min.(0, K_CA * ∂T∂z_n)
             @. wT[:, n] = wT_NN_n - K∂T∂z_n
         end
     end

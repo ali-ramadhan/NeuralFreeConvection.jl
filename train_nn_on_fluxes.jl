@@ -15,7 +15,6 @@ using OceanParameterizations
 using FreeConvection
 
 using OrdinaryDiffEq: ROCK4
-using FreeConvection: inscribe_history
 
 ENV["DATADEPS_ALWAYS_ACCEPT"] = "true"
 ENV["GKSwstype"] = "100"
@@ -264,6 +263,7 @@ begin
     ax = Axis(fig[1, 1], xlabel="Epochs", ylabel="Loss")
     lines!(ax, 1:epochs, mean_losses, label="mean")
     lines!(ax, 1:epochs, median_losses, label="median")
+    xlims!(ax, (0, epochs))
     axislegend(ax, position=:rt)
     filepath = joinpath(output_dir, "loss_history_trained_on_fluxes.png")
     save(filepath, fig, px_per_unit=2)
@@ -334,7 +334,7 @@ end
 function clean_flux_loss_history(lh; max_loss=1)
     lh = copy(lh)
     outliers = lh .> max_loss
-    lh[outliers] .= 0
+    lh[outliers] .= eps()  # To avoid plotting zeros on a log scale.
     return lh
 end
 
