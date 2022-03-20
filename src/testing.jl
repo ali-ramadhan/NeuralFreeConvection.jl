@@ -14,7 +14,7 @@ function compute_nn_flux_prediction_history(datasets, nn_filepath, nn_history_fi
 
     ids = keys(datasets)
     flux_history = Dict(id => zeros(epochs, Nz-1, Nt) for id in ids)
-    flux_loss_history = Dict(id => zeros(epochs, Nt) for id in ids)
+    loss_history = Dict(id => zeros(epochs, Nt) for id in ids)
 
     for e in 1:epochs
         @info "Computing fluxes for epoch $e/$epochs..."
@@ -28,7 +28,7 @@ function compute_nn_flux_prediction_history(datasets, nn_filepath, nn_history_fi
                 wT_missing_prediction = NN(T_profile)
                 flux_history[id][e, :, n] = wT_missing_prediction |> inv(wT_scaling)
 
-                flux_loss_history[id][e, n] = Flux.Losses.mse(wT_missing_prediction, wT_missing_profile[2:end-1])
+                loss_history[id][e, n] = Flux.Losses.mse(wT_missing_prediction, wT_missing_profile[2:end-1])
             end
         end
     end
@@ -36,10 +36,10 @@ function compute_nn_flux_prediction_history(datasets, nn_filepath, nn_history_fi
     close(final_nn)
     close(history)
 
-    return flux_history, flux_loss_history
+    return flux_history, loss_history
 end
 
-function compute_nde_solution_history(datasets, NDEType, algorithm, nn_filepath, nn_history_filepath; gc_interval=50)
+function compute_nde_solution_history(datasets, NDEType, nde_params, algorithm, nn_filepath, nn_history_filepath; gc_interval=50)
     final_nn = jldopen(nn_filepath, "r")
 
     Nz = final_nn["grid_points"]
@@ -50,8 +50,11 @@ function compute_nde_solution_history(datasets, NDEType, algorithm, nn_filepath,
     history = jldopen(nn_history_filepath, "r")
     epochs = keys(history["neural_network"]) |> length
 
+    Nt = size(datasets[1]["T"], 4)
+
     ids = keys(datasets)
-    solution_history = Dict(id => [] for id in ids)
+    solution_history = Dict(id => zeros(epochs, Nz, Nt) for id in ids)
+    loss_history = Dict(id => zeros(epochs, Nt) for id in ids)
 
     for e in 1:epochs
         @info "Computing NDE solutions for epoch $e/$epochs..."
@@ -59,8 +62,11 @@ function compute_nde_solution_history(datasets, NDEType, algorithm, nn_filepath,
         NN = history["neural_network/$e"]
 
         for (id, ds) in datasets
-            nde_sol = solve_nde(ds, NN, NDEType, algorithm, T_scaling, wT_scaling)
-            push!(solution_history[id], nde_sol)
+            nde_sol = solve_nde(ds, NN, NDEType, nde_params[id], algorithm, T_scaling, wT_scaling)
+            solution_history[id][e, :, :] = nde_sol.T
+
+            T_true = interior(ds["T"])[1, 1, :, :]
+            loss_history[id][e, :] = Flux.Losses.mse(T_true, nde_sol.T, agg=x->mean(x, dims=1))
         end
 
         e % gc_interval == 0 && GC.gc() # Mercy if you're running this on a little laptop.
@@ -69,7 +75,7 @@ function compute_nde_solution_history(datasets, NDEType, algorithm, nn_filepath,
     close(final_nn)
     close(history)
 
-    return solution_history
+    return solution_history, loss_history
 end
 
 function plot_epoch_loss(ids_train, ids_test, nde_solutions, true_solutions, T_scaling; filepath_prefix)

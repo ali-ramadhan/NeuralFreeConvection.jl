@@ -6,17 +6,15 @@ using LinearAlgebra
 
 using ArgParse
 using LoggingExtras
-using DataDeps
 using Flux
 using JLD2
-using OrdinaryDiffEq
-using Zygote
 using CairoMakie
 
 using Oceananigans
 using OceanParameterizations
 using FreeConvection
 
+using OrdinaryDiffEq: ROCK4
 using FreeConvection: inscribe_history
 
 ENV["DATADEPS_ALWAYS_ACCEPT"] = "true"
@@ -129,8 +127,6 @@ if use_convective_adjustment
     @info "Computing convective adjustment solutions and fluxes (and missing fluxes)..."
 
     for (id, ds) in data.coarse_datasets
-        id >= 19 && continue
-
         sol = oceananigans_convective_adjustment(ds; output_dir)
 
         grid = ds["T"].grid
@@ -312,7 +308,6 @@ function animate_fluxes(ds, NN, T_scaling, wT_scaling; filepath, title="", frame
 end
 
 for (id, ds) in data.coarse_datasets
-    id >= 19 && continue
     filepath = joinpath(output_dir, "animating_fluxes_simulation$id.mp4")
     animate_fluxes(ds, NN, T_scaling, wT_scaling; filepath)
 end
@@ -320,8 +315,7 @@ end
 
 @info "Computing flux history for each simulation..."
 
-dss = Dict(id => ds for (id, ds) in data.coarse_datasets if id < 19)
-flux_history, flux_loss_history = compute_nn_flux_prediction_history(dss, nn_filepath, history_filepath)
+flux_history, flux_loss_history = compute_nn_flux_prediction_history(data.coarse_datasets, nn_filepath, history_filepath)
 
 jldopen(history_filepath, "a") do file
     file["flux_history"] = flux_history
@@ -352,12 +346,50 @@ begin
 
     fig = Figure()
     ax = Axis(fig[1, 1], yscale=log10, title="Flux loss history on validation simulations", xlabel="Epochs", ylabel="MSE loss (fluxes)")
-    for id in 10:18
+    for id in 10:21
         lines!(mean(clean_flux_loss_history(flux_loss_history[id]), dims=2)[:], label="$id")
     end
     xlims!(ax, (0, epochs))
     Legend(fig[1, 2], ax, "simulation", framevisible=false)
 
     filepath = joinpath(output_dir, "flux_loss_history_trained_on_fluxes_validation.png")
+    save(filepath, fig, px_per_unit=2)
+end
+
+
+@info "Computing NDE solution and loss history for each simulation..."
+
+K_CA = 2  # Optimal value from optimize_convective_adujstment.jl
+nde_params = Dict(id => ConvectiveAdjustmentNDEParameters(ds, T_scaling, wT_scaling, K_CA) for (id, ds) in data.coarse_datasets)
+solution_history, solution_loss_history = compute_nde_solution_history(data.coarse_datasets, ConvectiveAdjustmentNDE, nde_params, ROCK4(), nn_filepath, history_filepath)
+
+jldopen(history_filepath, "a") do file
+    file["solution_history"] = solution_history
+    file["solution_loss_history"] = solution_loss_history
+end
+
+@info "Plotting solution loss history for each simulation...."
+
+begin
+    fig = Figure()
+    ax = Axis(fig[1, 1], yscale=log10, title="Solution loss history on training simulations", xlabel="Epochs", ylabel="MSE loss (time series)")
+    for id in 1:9
+        lines!(mean(solution_loss_history[id], dims=2)[:], label="$id")
+    end
+    xlims!(ax, (0, epochs))
+    Legend(fig[1, 2], ax, "simulation", framevisible=false)
+
+    filepath = joinpath(output_dir, "solution_loss_history_trained_on_fluxes_training.png")
+    save(filepath, fig, px_per_unit=2)
+
+    fig = Figure()
+    ax = Axis(fig[1, 1], yscale=log10, title="Solution loss history on validation simulations", xlabel="Epochs", ylabel="MSE loss (time series)")
+    for id in 10:21
+        lines!(mean(solution_loss_history[id], dims=2)[:], label="$id")
+    end
+    xlims!(ax, (0, epochs))
+    Legend(fig[1, 2], ax, "simulation", framevisible=false)
+
+    filepath = joinpath(output_dir, "solution_loss_history_trained_on_fluxes_validation.png")
     save(filepath, fig, px_per_unit=2)
 end
