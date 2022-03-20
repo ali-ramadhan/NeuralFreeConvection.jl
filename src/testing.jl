@@ -1,5 +1,44 @@
 using CairoMakie
 
+function compute_nn_flux_prediction_history(datasets, nn_filepath, nn_history_filepath)
+    final_nn = jldopen(nn_filepath, "r")
+
+    Nz = final_nn["grid_points"]
+    T_scaling = final_nn["T_scaling"]
+    wT_scaling = final_nn["wT_scaling"]
+
+    history = jldopen(nn_history_filepath, "r")
+    epochs = keys(history["neural_network"]) |> length
+
+    Nt = size(datasets[1]["T"], 4)
+
+    ids = keys(datasets)
+    flux_history = Dict(id => zeros(epochs, Nz-1, Nt) for id in ids)
+    flux_loss_history = Dict(id => zeros(epochs, Nt) for id in ids)
+
+    for e in 1:epochs
+        @info "Computing fluxes for epoch $e/$epochs..."
+
+        NN = history["neural_network/$e"]
+
+        for (id, ds) in datasets
+            for n in 1:Nt
+                T_profile = interior(ds["T"])[1, 1, :, n] |> T_scaling
+                wT_missing_profile = interior(ds["wT_missing"])[1, 1, :, n] |> wT_scaling
+                wT_missing_prediction = NN(T_profile)
+                flux_history[id][e, :, n] = wT_missing_prediction |> inv(wT_scaling)
+
+                flux_loss_history[id][e, n] = Flux.Losses.mse(wT_missing_prediction, wT_missing_profile[2:end-1])
+            end
+        end
+    end
+
+    close(final_nn)
+    close(history)
+
+    return flux_history, flux_loss_history
+end
+
 function compute_nde_solution_history(datasets, NDEType, algorithm, nn_filepath, nn_history_filepath; gc_interval=50)
     final_nn = jldopen(nn_filepath, "r")
 
