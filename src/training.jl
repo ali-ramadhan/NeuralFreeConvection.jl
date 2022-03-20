@@ -1,19 +1,9 @@
 using GalacticOptim
 
-function inscribe_history(history_filepath, NN, loss)
+function inscribe_history(history_filepath, epoch; kwargs...)
     jldopen(history_filepath, "a") do file
-        if !haskey(file, "loss")
-            file["loss/1"] = loss
-        else
-            epochs = length(keys(file["loss"])) + 1
-            file["loss/$epochs"] = loss
-        end
-
-        if !haskey(file, "neural_network")
-            file["neural_network/1"] = NN
-        else
-            epochs = length(keys(file["neural_network"])) + 1
-            file["neural_network/$epochs"] = NN
+        for (name, val) in pairs(kwargs)
+            file["$name/$epoch"] = val
         end
     end
     return nothing
