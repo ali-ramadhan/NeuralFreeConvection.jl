@@ -129,6 +129,8 @@ if use_convective_adjustment
     @info "Computing convective adjustment solutions and fluxes (and missing fluxes)..."
 
     for (id, ds) in data.coarse_datasets
+        id >= 19 && continue
+
         sol = oceananigans_convective_adjustment(ds; output_dir)
 
         grid = ds["T"].grid
@@ -137,12 +139,9 @@ if use_convective_adjustment
         ds.fields["T_param"] = FieldTimeSeries(grid, (Center, Center, Center), times, ArrayType=Array{Float32})
         ds.fields["wT_param"] = FieldTimeSeries(grid, (Center, Center, Face), times, ArrayType=Array{Float32})
         ds.fields["wT_missing"] = FieldTimeSeries(grid, (Center, Center, Face), times, ArrayType=Array{Float32})
-
-        ds.fields["T_param"][1, 1, :, :] .= sol.T
-        ds.fields["wT_param"][1, 1, :, :] .= sol.wT
-
-        ds.fields["wT_missing"].data .= ds.fields["wT"].data .- ds.fields["κₑ_∂z_T"].data .- ds.fields["wT_param"].data
-    end
+        flux_loss_history_id = copy(flux_loss_history[id])
+        outliers = flux_loss_history_id .> max_loss
+        flux_loss_history_id[outliers] .= 0
 end
 
 
@@ -223,7 +222,7 @@ function nn_callback()
     return mean_loss, median_loss
 end
 
-history_filepath = joinpath(output_dir, "neural_network_trained_on_fluxes_history.jld2")
+history_filepath = joinpath(output_dir, "neural_network_history_trained_on_fluxes.jld2")
 
 optimizers = [ADAM()]
 for opt in optimizers, e in 1:epochs, (i, mini_batch) in enumerate(data_loader)
@@ -231,12 +230,9 @@ for opt in optimizers, e in 1:epochs, (i, mini_batch) in enumerate(data_loader)
 
     # Flux.train!(nn_loss, Flux.params(NN), mini_batch, opt)
     Flux.train!(nn_training_set_loss, Flux.params(NN), [training_data], opt)
-
-    mean_loss, median_loss = nn_callback()
-    inscribe_history(history_filepath, e, neural_network=NN; mean_loss, median_loss)
-end
-
-
+    flux_loss_history_id = copy(flux_loss_history[id])
+    outliers = flux_loss_history_id .> max_loss
+    flux_loss_history_id[outliers] .= 0
 @info "Saving trained neural network weights to disk..."
 
 nn_filepath = joinpath(output_dir, "neural_network_trained_on_fluxes.jld2")
@@ -316,6 +312,52 @@ function animate_fluxes(ds, NN, T_scaling, wT_scaling; filepath, title="", frame
 end
 
 for (id, ds) in data.coarse_datasets
+    id >= 19 && continue
     filepath = joinpath(output_dir, "animating_fluxes_simulation$id.mp4")
     animate_fluxes(ds, NN, T_scaling, wT_scaling; filepath)
+end
+
+
+@info "Computing flux history for each simulation..."
+
+dss = Dict(id => ds for (id, ds) in data.coarse_datasets if id < 19)
+flux_history, flux_loss_history = compute_nn_flux_prediction_history(dss, nn_filepath, history_filepath)
+
+jldopen(history_filepath, "a") do file
+    file["flux_history"] = flux_history
+    file["flux_loss_history"] = flux_loss_history
+end
+
+function clean_flux_loss_history(lh; max_loss=1)
+    lh = copy(lh)
+    outliers = lh .> max_loss
+    lh[outliers] .= 0
+    return lh
+end
+
+
+@info "Plotting flux loss history for each simulation...."
+
+begin
+    fig = Figure()
+    ax = Axis(fig[1, 1], yscale=log10, title="Flux loss history on training simulations", xlabel="Epochs", ylabel="MSE loss (fluxes)")
+    for id in 1:9
+        lines!(mean(clean_flux_loss_history(flux_loss_history[id]), dims=2)[:], label="$id")
+    end
+    xlims!(ax, (0, epochs))
+    Legend(fig[1, 2], ax, "simulation", framevisible=false)
+
+    filepath = joinpath(output_dir, "flux_loss_history_trained_on_fluxes_training.png")
+    save(filepath, fig, px_per_unit=2)
+
+    fig = Figure()
+    ax = Axis(fig[1, 1], yscale=log10, title="Flux loss history on validation simulations", xlabel="Epochs", ylabel="MSE loss (fluxes)")
+    for id in 10:18
+        lines!(mean(clean_flux_loss_history(flux_loss_history[id]), dims=2)[:], label="$id")
+    end
+    xlims!(ax, (0, epochs))
+    Legend(fig[1, 2], ax, "simulation", framevisible=false)
+
+    filepath = joinpath(output_dir, "flux_loss_history_trained_on_fluxes_validation.png")
+    save(filepath, fig, px_per_unit=2)
 end
