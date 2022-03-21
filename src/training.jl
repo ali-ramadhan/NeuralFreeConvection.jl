@@ -48,6 +48,7 @@ function train_neural_differential_equation!(NN, NDEType, nde_params, algorithm,
     end
 
     current_epoch = 1
+    t₀ = time_ns()
 
     function nde_callback(weights, extra_params)
         mse_loss = nde_loss(weights, extra_params)
@@ -56,8 +57,13 @@ function train_neural_differential_equation!(NN, NDEType, nde_params, algorithm,
                        current_epoch, epochs, typeof(mse_loss), mse_loss)
 
         NN = reconstruct(weights)
-        inscribe_history(history_filepath, current_epoch, neural_network=NN, mean_loss=mse_loss)
+
+        runtime = (time_ns() - t₀) * 1e-9
+        inscribe_history(history_filepath, current_epoch, neural_network=NN, mean_loss=mse_loss; runtime)
+
         current_epoch += 1
+        t₀ = time_ns()
+
         return false
     end
 

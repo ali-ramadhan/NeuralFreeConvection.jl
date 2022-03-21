@@ -248,13 +248,9 @@ for opt in optimizers
     @info "Training free convection NDE with iterations=$training_iterations for $full_epochs epochs with $(typeof(opt))(η=$(opt.eta))..."
 
     global NN
-    t₀ = time_ns()
 
     NN = train_neural_differential_equation!(NN, NDEType, nde_params, algorithm, coarse_training_datasets, T_scaling,
                                              training_iterations, opt, full_epochs; history_filepath)
-
-    runtime = (time_ns() - t₀) * 1e-9
-    inscribe_history(history_filepath, 1; runtime)
 end
 
 
