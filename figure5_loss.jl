@@ -6,76 +6,113 @@ using CairoMakie
 using FreeConvection
 
 using Flux.Losses: mse
+using OrdinaryDiffEq: ROCK4
+using Oceananigans: interior
 
 function parse_command_line_arguments()
     settings = ArgParseSettings()
 
     @add_arg_table! settings begin
-        "--output-directory"
-            help = "Output directory filepath."
+        "--output-directory-fluxes"
+            help = "Output directory for neural network trained on fluxes."
+            arg_type = String
+
+        "--output-directory-timeseries"
+            help = "Output directory for neural differential equation trained on time series."
             arg_type = String
     end
 
     return parse_args(settings)
 end
 
-function plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solutions, T_scaling; filepath_prefix, normalize=false, alpha=0.3)
-    epochs = length(nde_solutions[first(ids)])
+function clean_flux_loss_history(lh; max_loss=1)
+    lh = copy(lh)
+    outliers = lh .> max_loss
+    lh[outliers] .= eps()  # To avoid plotting zeros on a log scale.
+    return lh
+end
 
-    fig = Figure()
-    ax = Axis(fig[1, 1], xlabel="Epoch", ylabel="Loss function", yscale=log10, xgridvisible=false, ygridvisible=false)
+function figure5_losses(ids, flux_loss_history_tof, flux_loss_history_tots, solution_loss_history_tof, solution_loss_history_tots; filepath_prefix)
+    fig = Figure(resolution=(800, 600), figure_padding=(10, 40, 0, 0))
 
-    loss_histories = Dict(
-        id => [mse(T_scaling.(true_solutions[id].T), T_scaling.(nde_solutions[id][e].T)) for e in 1:epochs]
-        for id in ids
-    )
+    epochs_tof = size(flux_loss_history_tof[first(ids)], 1)
+    epochs_tots = size(flux_loss_history_tots[first(ids)], 1)
 
-    for sub_ids in (1:9, 10:12, 13:15, 16:18, 19:21)
-        min_loss_training = [minimum([loss_histories[id][e] for id in sub_ids]) for e in 1:epochs]
-        max_loss_training = [maximum([loss_histories[id][e] for id in sub_ids]) for e in 1:epochs]
-        mean_loss_training = [mean([loss_histories[id][e] for id in sub_ids]) for e in 1:epochs]
+    mean_flux_loss_tof = Dict(id => mean(clean_flux_loss_history(flux_loss_history_tof[id]), dims=2)[:] for id in ids)
+    mean_flux_loss_tots = Dict(id => mean(clean_flux_loss_history(flux_loss_history_tots[id]), dims=2)[:] for id in ids)
 
-        if normalize
-            normalization_factor = maximum(max_loss_training)
-            min_loss_training ./= normalization_factor
-            max_loss_training ./= normalization_factor
-            mean_loss_training ./= normalization_factor
-        end
+    mean_sol_loss_tof = Dict(id => mean(solution_loss_history_tof[id], dims=2)[:] for id in ids)
+    mean_sol_loss_tots = Dict(id => mean(solution_loss_history_tots[id], dims=2)[:] for id in ids)
 
-        band!(ax, 1:epochs, min_loss_training, max_loss_training, color=simulation_color(sub_ids[1]; alpha))
-        lines!(ax, 1:epochs, mean_loss_training, color=simulation_color(sub_ids[1]))
+    ax11 = Axis(fig[1, 1], title="Trained on ℒ₁ (fluxes)", ylabel="ℒ₁ (fluxes)", xgridvisible=false, ygridvisible=false, xticklabelsvisible=false)
+    ax12 = Axis(fig[1, 2], title="Trained on ℒ₂ (time series)", xgridvisible=false, ygridvisible=false, xticklabelsvisible=false, yticklabelsvisible=false)
+    ax21 = Axis(fig[2, 1], xlabel="Epoch", ylabel="ℒ₂ (time series)", yscale=log10, xgridvisible=false, ygridvisible=false)
+    ax22 = Axis(fig[2, 2], xlabel="Epoch", yscale=log10, xgridvisible=false, ygridvisible=false, yticklabelsvisible=false)
+
+    simulation_sub_ids = (10:12, 13:15, 16:18, 19:21, 1:9)
+
+    for sub_ids in simulation_sub_ids
+        mean_flux_loss_tof_sub = [mean([mean_flux_loss_tof[id][e] for id in sub_ids]) for e in 1:epochs_tof]
+        lines!(ax11, 1:epochs_tof, mean_flux_loss_tof_sub, color=simulation_color(sub_ids[1]))
+
+        mean_flux_loss_tots_sub = [mean([mean_flux_loss_tots[id][e] for id in sub_ids]) for e in 1:epochs_tots]
+        lines!(ax12, 1:epochs_tots, mean_flux_loss_tots_sub, color=simulation_color(sub_ids[1]))
+
+        mean_sol_loss_tof_sub = [mean([mean_sol_loss_tof[id][e] for id in sub_ids]) for e in 1:epochs_tof]
+        lines!(ax21, 1:epochs_tof, mean_sol_loss_tof_sub, color=simulation_color(sub_ids[1]))
+
+        mean_sol_loss_tots_sub = [mean([mean_sol_loss_tots[id][e] for id in sub_ids]) for e in 1:epochs_tots]
+        lines!(ax22, 1:epochs_tots, mean_sol_loss_tots_sub, color=simulation_color(sub_ids[1]))
     end
 
-    xticks = 0:100:500
-    ax.xticks = (xticks, string.(xticks))
-    xlims!(0, epochs)
+    xlims!(ax11, (0, epochs_tof))
+    xlims!(ax12, (0, epochs_tots))
+    xlims!(ax21, (0, epochs_tof))
+    xlims!(ax22, (0, epochs_tots))
 
-    entry_ids = (1, 10, 13, 16, 19)
-    entries = [PolyElement(color=simulation_color(id)) for id in entry_ids]
-    labels = [simulation_label(id) for id in entry_ids]
+    ylims!(ax11, (0, 3e-1))
+    ylims!(ax12, (0, 3e-1))
+    ylims!(ax21, (1e-5, 2e-3))
+    ylims!(ax22, (1e-5, 2e-3))
 
-    Legend(fig[1, 2], entries, labels, framevisible=false)
+    ax21.yticks = ([1e-5, 1e-4, 1e-3], ["10⁻⁵", "10⁻⁴", "10⁻³"])
+    ax22.yticks = ([1e-5, 1e-4, 1e-3], ["10⁻⁵", "10⁻⁴", "10⁻³"])
+
+    simulation_sub_ids = (1:9, 10:12, 13:15, 16:18, 19:21)
+    entries = [LineElement(color=simulation_color(sub_ids[1])) for sub_ids in simulation_sub_ids]
+    labels = [simulation_label(sub_ids[1]) for sub_ids in simulation_sub_ids]
+    Legend(fig[0, :], entries, labels, framevisible=false, orientation=:horizontal, tellwidth=true, tellheight=true)
 
     @info "Saving $filepath_prefix..."
     save(filepath_prefix * ".png", fig, px_per_unit=2)
     save(filepath_prefix * ".pdf", fig, pt_per_unit=2)
 
-    return nothing
+    return fig
 end
 
 args = parse_command_line_arguments()
-output_dir = args["output-directory"]
+output_dir_tof = args["output-directory-fluxes"]
+output_dir_tots = args["output-directory-timeseries"]
 
-solutions_filepath = joinpath(output_dir, "solutions_and_history.jld2")
-file = jldopen(solutions_filepath, "r")
+Nz = 32
 
-true_solutions = file["true"]
-nde_solutions = file["nde_history"]
-T_scaling = file["T_scaling"]
+ids_train = 1:9
+ids_test = setdiff(FreeConvection.SIMULATION_IDS, ids_train)
 
-ids = keys(nde_solutions) |> collect |> sort
+data = load_data(ids_train, ids_test, Nz)
+datasets = data.coarse_datasets
 
-plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solutions, T_scaling, filepath_prefix=joinpath(output_dir, "figure5_loss"))
-plot_epoch_loss_summary_filled_curves(ids, nde_solutions, true_solutions, T_scaling, filepath_prefix=joinpath(output_dir, "figure5_loss_normalized"), normalize=true)
+history_filepath_tof = joinpath(output_dir_tof, "neural_network_history_trained_on_fluxes.jld2")
+history_filepath_tots = joinpath(output_dir_tots, "neural_network_history_trained_on_timeseries.jld2")
 
-close(file)
+file_tof = jldopen(history_filepath_tof)
+file_tots = jldopen(history_filepath_tots)
+
+flux_loss_history_tof = file_tof["flux_loss_history"]
+flux_loss_history_tots = file_tots["flux_loss_history"]
+
+solution_loss_history_tof = file_tof["solution_loss_history"]
+solution_loss_history_tots = file_tots["solution_loss_history"]
+
+ids = keys(datasets) |> collect |> sort
+figure5_losses(ids, flux_loss_history_tof, flux_loss_history_tots, solution_loss_history_tof, solution_loss_history_tots, filepath_prefix="figure5_loss_4panels")
