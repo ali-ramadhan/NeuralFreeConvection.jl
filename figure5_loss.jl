@@ -114,5 +114,8 @@ flux_loss_history_tots = file_tots["flux_loss_history"]
 solution_loss_history_tof = file_tof["solution_loss_history"]
 solution_loss_history_tots = file_tots["solution_loss_history"]
 
+close(file_tof)
+close(file_tots)
+
 ids = keys(datasets) |> collect |> sort
 figure5_losses(ids, flux_loss_history_tof, flux_loss_history_tots, solution_loss_history_tof, solution_loss_history_tots, filepath_prefix="figure5_loss_4panels")

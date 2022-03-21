@@ -387,6 +387,4 @@ jldopen(solutions_filepath, "w") do file
     file["tke"] = tke_solutions
     file["convective_adjustment"] = convective_adjustment_solutions
     file["oceananigans"] = oceananigans_solutions
-
-    file["nde_history"] = nde_solution_history
 end
