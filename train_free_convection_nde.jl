@@ -364,33 +364,33 @@ begin
 end
 
 
-# @info "Gathering and computing solutions..."
+@info "Gathering and computing solutions..."
 
-# true_solutions = Dict(id => (T=interior(ds["T"])[1, 1, :, :], wT=interior(ds["wT"])[1, 1, :, :]) for (id, ds) in coarse_datasets)
-# nde_solutions = Dict(id => solve_nde(ds, NN, NDEType, algorithm, T_scaling, wT_scaling) for (id, ds) in coarse_datasets)
-# kpp_solutions = Dict(id => free_convection_kpp(ds) for (id, ds) in coarse_datasets)
-# tke_solutions = Dict(id => free_convection_tke_mass_flux(ds) for (id, ds) in coarse_datasets)
+true_solutions = Dict(id => (T=interior(ds["T"])[1, 1, :, :], wT=interior(ds["wT"])[1, 1, :, :]) for (id, ds) in coarse_datasets)
+nde_solutions = Dict(id => solve_nde(ds, NN, NDEType, nde_params[id], algorithm, T_scaling, wT_scaling) for (id, ds) in coarse_datasets)
+kpp_solutions = Dict(id => free_convection_kpp(ds) for (id, ds) in coarse_datasets)
+tke_solutions = Dict(id => free_convection_tke_mass_flux(ds) for (id, ds) in coarse_datasets)
 
-# convective_adjustment_solutions = Dict(id => oceananigans_convective_adjustment(ds; output_dir) for (id, ds) in coarse_datasets)
-# oceananigans_solutions = Dict(id => oceananigans_convective_adjustment_with_neural_network(ds, output_dir=output_dir, nn_filepath=nn_filepath) for (id, ds) in coarse_datasets)
+convective_adjustment_solutions = Dict(id => oceananigans_convective_adjustment(ds, K=K_CA; output_dir) for (id, ds) in coarse_datasets)
+oceananigans_solutions = Dict(id => oceananigans_convective_adjustment_with_neural_network(ds, K=K_CA, output_dir=output_dir, nn_filepath=nn_filepath) for (id, ds) in coarse_datasets)
 
 
-# @info "Saving solutions to JLD2..."
+@info "Saving solutions to JLD2..."
 
-# solutions_filepath = joinpath(output_dir, "solutions_and_history.jld2")
+solutions_filepath = joinpath(output_dir, "solutions_and_history.jld2")
 
-# jldopen(solutions_filepath, "w") do file
-#     file["grid_points"] = Nz
-#     file["neural_network"] = NN
-#     file["T_scaling"] = T_scaling
-#     file["wT_scaling"] = wT_scaling
+jldopen(solutions_filepath, "w") do file
+    file["grid_points"] = Nz
+    file["neural_network"] = NN
+    file["T_scaling"] = T_scaling
+    file["wT_scaling"] = wT_scaling
 
-#     file["true"] = true_solutions
-#     file["nde"] = nde_solutions
-#     file["kpp"] = kpp_solutions
-#     file["tke"] = tke_solutions
-#     file["convective_adjustment"] = convective_adjustment_solutions
-#     file["oceananigans"] = oceananigans_solutions
+    file["true"] = true_solutions
+    file["nde"] = nde_solutions
+    file["kpp"] = kpp_solutions
+    file["tke"] = tke_solutions
+    file["convective_adjustment"] = convective_adjustment_solutions
+    file["oceananigans"] = oceananigans_solutions
 
-#     file["nde_history"] = nde_solution_history
-# end
+    file["nde_history"] = nde_solution_history
+end

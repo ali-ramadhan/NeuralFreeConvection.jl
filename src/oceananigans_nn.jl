@@ -143,7 +143,7 @@ function oceananigans_convective_adjustment(ds; output_dir=".", Δt=600, K=10)
     return solution
 end
 
-function oceananigans_convective_adjustment_with_neural_network(ds; output_dir, nn_filepath, Δt=600)
+function oceananigans_convective_adjustment_with_neural_network(ds; output_dir, nn_filepath, Δt=600, K=10)
 
     T = ds["T"]
     wT = ds["wT"]
@@ -179,8 +179,8 @@ function oceananigans_convective_adjustment_with_neural_network(ds; output_dir, 
 
     enforce_fluxes(wT) = cat(0, wT, heat_flux, dims=1)
 
-    # convective adjustment diffusivity
-    K = wT_scaling.σ / T_scaling.σ * stop_time / Lz * 10
+    # Non-dimensionalizing the convective adjustment diffusivity
+    K = wT_scaling.σ / T_scaling.σ * stop_time / Lz * K
 
     function diagnose_wT_NN(model)
         T = interior(model.tracers.T)[:]

@@ -51,7 +51,7 @@ NN = Chain(Dense(Nz, 4Nz, relu),
            Dense(4Nz, 4Nz, relu),
            Dense(4Nz, Nz-1))
 
-for p in params(NN)
+for p in Flux.params(NN)
     p .= 0
 end
 
@@ -74,11 +74,11 @@ begin
     best_K_CA = K_CAs[argmin(losses .* runtimes)]
     @show best_K_CA
 
-    ax1 = Axis(fig[1, 1], ylabel="MSE loss", xscale=log10, yscale=log10)
+    ax1 = Axis(fig[1, 1], ylabel="Mean squared error loss", xscale=log10, yscale=log10)
     lines!(ax1, K_CAs, losses)
     vlines!(ax1, best_K_CA, color=(:red, 0.5))
 
-    ax2 = Axis(fig[2, 1], xlabel="K_CA", ylabel="Runtime (seconds)", xscale=log10)
+    ax2 = Axis(fig[2, 1], xlabel="Convective adjustment diffusivity", ylabel="Runtime (seconds)", xscale=log10)
     lines!(ax2, K_CAs, runtimes)
     vlines!(ax2, best_K_CA, color=(:red, 0.5))
 
@@ -86,4 +86,5 @@ begin
     xlims!(ax2, (K_CAs[1], K_CAs[end]))
 
     save("figureC_optimal_convective_adjustment_parameter.png", fig, px_per_unit=2)
+    save("figureC_optimal_convective_adjustment_parameter.pdf", fig, pt_per_unit=2)
 end

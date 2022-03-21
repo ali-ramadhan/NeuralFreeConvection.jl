@@ -53,6 +53,11 @@ function parse_command_line_arguments()
             default = 10
             arg_type = Int
 
+        "--neural-network-architecture"
+            help = "Chooses from a set of pre-defined neural network architectures. Options: dense-default, dense-deeper, dense-wider, conv-2, conv-4"
+            default = "dense-default"
+            arg_type = String
+
         "--animate-training-data"
             help = "Produce gif and mp4 animations of each training simulation's data."
             action = :store_true
@@ -72,6 +77,7 @@ use_missing_fluxes = use_convective_adjustment
 
 Nz = args["grid-points"]
 epochs = args["epochs"]
+nn_architecture = args["neural-network-architecture"]
 
 ids_train = args["training-simulations"][1]
 ids_test = setdiff(FreeConvection.SIMULATION_IDS, ids_train)
@@ -99,9 +105,38 @@ TeeLogger(
 
 @info "Architecting neural network..."
 
-NN = Chain(Dense(Nz, 4Nz, relu),
-           Dense(4Nz, 4Nz, relu),
-           Dense(4Nz, Nz-1))
+if nn_architecture == "dense-default"
+    NN = Chain(Dense(Nz, 4Nz, relu),
+               Dense(4Nz, 4Nz, relu),
+               Dense(4Nz, Nz-1))
+elseif nn_architecture == "dense-wider"
+    NN = Chain(Dense(Nz, 8Nz, relu),
+               Dense(8Nz, 8Nz, relu),
+               Dense(8Nz, Nz-1))
+elseif nn_architecture == "dense-deeper"
+    NN = Chain(Dense(Nz, 4Nz, relu),
+               Dense(4Nz, 4Nz, relu),
+               Dense(4Nz, 4Nz, relu),
+               Dense(4Nz, Nz-1))
+elseif nn_architecture == "conv-2"
+    conv = 2
+    NN = Chain(x -> reshape(x, Nz, 1, 1, 1),
+               Conv((conv, 1), 1 => 1, relu),
+               x -> reshape(x, Nz-conv+1),
+               Dense(Nz-conv+1, 4Nz, relu),
+               Dense(4Nz, 4Nz, relu),
+               Dense(4Nz, Nz-1))
+elseif nn_architecture == "conv-4"
+    conv = 4
+    NN = Chain(x -> reshape(x, Nz, 1, 1, 1),
+               Conv((conv, 1), 1 => 1, relu),
+               x -> reshape(x, Nz-conv+1),
+               Dense(Nz-conv+1, 4Nz, relu),
+               Dense(4Nz, 4Nz, relu),
+               Dense(4Nz, Nz-1))
+else
+    @error "Invalid neural network architecture: $nn_architecture"
+end
 
 for p in params(NN)
     p .*= 1e-5
