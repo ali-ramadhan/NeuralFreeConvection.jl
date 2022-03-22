@@ -1,7 +1,8 @@
 using Statistics
-
+using ArgParse
 using JLD2
 using CairoMakie
+using OceanTurb
 using FreeConvection
 
 using Flux.Losses: mse
@@ -10,7 +11,19 @@ using CairoMakie.Makie: wong_colors
 using Oceananigans: interior
 using Oceananigans.Units: days
 
-function plot_figure7_loss_comparisons(datasets, nde_sols, kpp_sols, convective_adjustment_sols, T_scaling; filepath_prefix, rows=2, cols=3, alpha=0.3, ylims=(1e-6, 1e-1))
+function parse_command_line_arguments()
+    settings = ArgParseSettings()
+
+    @add_arg_table! settings begin
+        "--output-directory"
+            help = "Output directory for neural network trained on time series."
+            arg_type = String
+    end
+
+    return parse_args(settings)
+end
+
+function figure7_loss_comparisons(datasets, nde_sols, kpp_sols, convective_adjustment_sols, T_scaling; filepath_prefix, rows=2, cols=3, alpha=0.3, ylims=(1e-6, 1e-1))
 
     loss(T, T̂) = mse(T_scaling.(T), T_scaling.(T̂))
 
@@ -35,7 +48,11 @@ function plot_figure7_loss_comparisons(datasets, nde_sols, kpp_sols, convective_
     for (N, sub_ids) in enumerate(simulation_ids)
         i = mod(N-1, cols) + 1
         j = div(N-1, cols) + 1
-        ax = fig[i, j] = Axis(fig, title=simulation_label(sub_ids[1]), xlabel="Simulation time (days)", ylabel="Loss", yscale=log10)
+
+        xlabel = (i, j) == (3, 1) ? "Simulation time (days)" : ""
+        ylabel = (i, j) == (2, 1) ? "Loss" : ""
+        ax = fig[i, j] = Axis(fig, title=simulation_label(sub_ids[1]), xlabel=xlabel, ylabel=ylabel, yscale=log10,
+                                   xgridvisible=false, ygridvisible=false, xticklabelsvisible=i == cols, yticklabelsvisible=j == 1)
 
         for (p, loss_param) in enumerate((loss_kpp, loss_ca, loss_nde))
             loss_param_min = [minimum([loss_param[id][n] for id in sub_ids]) for n in 1:Nt]
@@ -52,20 +69,20 @@ function plot_figure7_loss_comparisons(datasets, nde_sols, kpp_sols, convective_
 
         xlims!(0, times[end])
         ylims!(ylims...)
-
-        i != cols && hidexdecorations!(ax, grid=false)
-        j != 1 && hideydecorations!(ax, grid=false)
     end
 
     entries = [PolyElement(color=c) for c in colors[1:3]]
-    labels = ["KPP", "Convective adjustment", "NDE"]
+    labels = ["K-Profile Parameterization", "Convective adjustment", "Neural differential equation"]
     Legend(fig[3, 2], entries, labels, framevisible=false, tellwidth=false, tellheight=false)
 
     save(filepath_prefix * ".png", fig, px_per_unit=2)
     save(filepath_prefix * ".pdf", fig, pt_per_unit=2)
 
-    return nothing
+    return fig
 end
+
+args = parse_command_line_arguments()
+output_dir = args["output-directory"]
 
 Nz = 32
 
@@ -75,14 +92,18 @@ ids_test = setdiff(FreeConvection.SIMULATION_IDS, ids_train)
 data = load_data(ids_train, ids_test, Nz)
 datasets = data.coarse_datasets
 
-file = jldopen("solutions_and_history.jld2", "r")
+solutions_filepath = joinpath(output_dir, "solutions_and_history.jld2")
+file = jldopen(solutions_filepath, "r")
 
 nde_solutions = file["nde"]
-kpp_solutions = file["kpp"]
 convective_adjustment_solutions = file["convective_adjustment"]
 T_scaling = file["T_scaling"]
 
-filepath_prefix = "figure7_loss_comparisons"
-plot_figure7_loss_comparisons(datasets, nde_solutions, kpp_solutions, convective_adjustment_solutions, T_scaling; filepath_prefix)
-
 close(file)
+
+# Generate KPP solutions using optimal parameters from optimize_kpp.jl
+kpp_parameters = OceanTurb.KPP.Parameters(CSL=2/3, CNL=5.0, Cb_T=0.16, CKE=8.0)
+kpp_solutions = Dict(id => free_convection_kpp(ds, parameters=kpp_parameters) for (id, ds) in data.coarse_datasets)
+
+filepath_prefix = "figure7_loss_comparisons"
+figure7_loss_comparisons(datasets, nde_solutions, kpp_solutions, convective_adjustment_solutions, T_scaling; filepath_prefix)
