@@ -31,7 +31,6 @@ function figure9_comparing_architectures(solution_loss_histories, labels; filepa
 
             lines!(ax, 1:epochs, mean_sol_loss, linewidth=3; color)
 
-            ax.xticks = 0:100:500
             xlims!(ax, (0, epochs))
         end
     end
@@ -49,7 +48,7 @@ end
 nn_archs = ["dense_default", "dense_wider", "dense_deeper", "conv_2", "conv_4"]
 labels = ["dense (default)", "dense (wider)", "dense (deeper)", "convolutional (2)", "convolutional (4)"]
 
-filepaths = [joinpath("trained_on_timeseries_500epochs_$nn_arch", "neural_network_history_trained_on_timeseries.jld2") for nn_arch in nn_archs]
+filepaths = [joinpath("trained_on_timeseries_$nn_arch", "neural_network_history_trained_on_timeseries.jld2") for nn_arch in nn_archs]
 files = [jldopen(fp, "r") for fp in filepaths]
 
 solution_loss_histories = [file["solution_loss_history"] for file in files]

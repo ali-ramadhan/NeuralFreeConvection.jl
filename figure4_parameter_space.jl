@@ -1,8 +1,8 @@
 using Statistics
+using ColorTypes
+using ColorSchemes
 using CairoMakie
 using FreeConvection
-
-using CairoMakie.Makie: wong_colors
 
 Nz = 32
 
@@ -24,16 +24,6 @@ Qbs = 1e-8 .* [
     1, 3,   5,
     1, 3,   5
 ]
-
-function color(id; alpha=1.0)
-    colors = CairoMakie.Makie.wong_colors(alpha)
-     1 <= id <= 9  && return colors[1]
-    10 <= id <= 12 && return colors[2]
-    13 <= id <= 15 && return colors[3]
-    16 <= id <= 18 && return colors[4]
-    19 <= id <= 21 && return colors[5]
-    error("Invalid ID: $id")
-end
 
 function label(id)
      1 <= id <= 9  && return "training"
@@ -66,10 +56,10 @@ let
         N²_midpoint = (N²_min + N²_max) / 2
         N²_half_interval = N²_max - N²_midpoint
 
-        scatter!(ax, [Qb], [N²_midpoint], color=color(n))
-        text!(ax, " " * string(n), position=(Qb, N²_midpoint), color=color(n), align=(:left, :center))
+        scatter!(ax, [Qb], [N²_midpoint], color=simulation_color(n))
+        text!(ax, " " * string(n), position=(Qb, N²_midpoint), color=simulation_color(n), align=(:left, :center))
 
-        errorbars!([Qb], [N²_midpoint], [N²_half_interval], [N²_half_interval], color=color(n), whiskerwidth=10)
+        errorbars!([Qb], [N²_midpoint], [N²_half_interval], [N²_half_interval], color=simulation_color(n), whiskerwidth=10)
 
         if n <= 9
             Qb < Qb_training_min && (Qb_training_min = Qb)
@@ -79,10 +69,10 @@ let
         end
     end
 
-    band!(ax, [Qb_training_min, Qb_training_max], N²_training_min, N²_training_max, color=color(1, alpha=0.25))
+    band!(ax, [Qb_training_min, Qb_training_max], N²_training_min, N²_training_max, color=simulation_color(1, alpha=0.25))
 
     entry_ids = (1, 10, 13, 16, 19)
-    entries = [MarkerElement(marker=:circle, color=color(id), strokecolor=:transparent, markersize=15) for id in entry_ids]
+    entries = [MarkerElement(marker=:circle, color=simulation_color(id), strokecolor=:transparent, markersize=15) for id in entry_ids]
     labels = [label(id) for id in entry_ids]
     Legend(fig[1, 2], entries, labels, framevisible=false)
 
@@ -94,4 +84,6 @@ let
 
     save("figure4_parameter_space.png", fig, px_per_unit=2)
     save("figure4_parameter_space.pdf", fig, pt_per_unit=2)
+
+    return fig
 end

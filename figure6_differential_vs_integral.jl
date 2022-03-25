@@ -1,6 +1,8 @@
 using Statistics
 using ArgParse
 using JLD2
+using ColorTypes
+using ColorSchemes
 using CairoMakie
 using FreeConvection
 
@@ -25,15 +27,12 @@ function parse_command_line_arguments()
     return parse_args(settings)
 end
 
-function figure6_differential_vs_integral_loss(ids, times, solution_loss_history_tof, solution_loss_history_tots; filepath_prefix, rows=2, cols=3, alpha=0.3)
+function figure6_differential_vs_integral_loss(ids, times, solution_loss_history_tof, solution_loss_history_tots; filepath_prefix, colors, rows=2, cols=3, alpha=0.3)
     _, Nt = size(solution_loss_history_tof[first(ids)])
 
     remove_zeros!(xs) = replace!(x -> iszero(x) ? NaN : x, xs)
 
     fig = Figure()
-
-    colors = wong_colors()
-    colors_alpha = wong_colors(alpha)
 
     # Ordered so that training subplot shows up at the bottom.
     simulation_ids = (10:12, 16:18, 1:9, 13:15, 19:21)
@@ -55,17 +54,17 @@ function figure6_differential_vs_integral_loss(ids, times, solution_loss_history
         loss_nde_tots_max = [maximum([solution_loss_history_tots[id][end, n] for id in sub_ids]) for n in 1:Nt] |> remove_zeros!
         loss_nde_tots_mean = [mean([solution_loss_history_tots[id][end, n] for id in sub_ids]) for n in 1:Nt] |> remove_zeros!
 
-        band!(ax, times, loss_nde_tof_min, loss_nde_tof_max, color=colors_alpha[2])
-        lines!(ax, times, loss_nde_tof_mean, color=colors[2])
+        band!(ax, times, loss_nde_tof_min, loss_nde_tof_max, color=RGBA(colors[1], alpha))
+        lines!(ax, times, loss_nde_tof_mean, linewidth=3, color=colors[1])
 
-        band!(ax, times, loss_nde_tots_min, loss_nde_tots_max, color=colors_alpha[3])
-        lines!(ax, times, loss_nde_tots_mean, color=colors[3])
+        band!(ax, times, loss_nde_tots_min, loss_nde_tots_max, color=RGBA(colors[2], alpha))
+        lines!(ax, times, loss_nde_tots_mean, linewidth=3, color=colors[2])
 
         xlims!(ax, (0, times[end]))
         ylims!(ax, (1e-6, 1e-2))
     end
 
-    entries = [PolyElement(color=c) for c in colors[2:3]]
+    entries = [PolyElement(color=c) for c in colors[1:2]]
     labels = ["Trained on fluxes", "Trained on time series"]
     Legend(fig[3, 2], entries, labels, framevisible=false, tellwidth=false, tellheight=false)
 
@@ -97,5 +96,6 @@ solution_loss_history_tots = file_tots["solution_loss_history"]
 
 ids = keys(data.coarse_datasets) |> collect |> sort
 times = data.coarse_datasets[1]["T"].times ./ days
+colors = wong_colors()[6:-1:5] .|> RGB
 filepath_prefix = "figure6_differential_vs_integral_loss"
-figure6_differential_vs_integral_loss(ids, times, solution_loss_history_tof, solution_loss_history_tots; filepath_prefix)
+figure6_differential_vs_integral_loss(ids, times, solution_loss_history_tof, solution_loss_history_tots; filepath_prefix, colors)

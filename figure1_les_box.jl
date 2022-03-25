@@ -3,8 +3,8 @@
 using Statistics
 using Printf
 using JLD2
+using ColorSchemes
 using GLMakie
-
 
 filepath = "free_convection_19/3d.jld2"
 file = jldopen(filepath)
@@ -42,8 +42,8 @@ rands_xy = zeros(Nx, Ny) .+ ε * randn(Nx, Ny)
 rands_xz = zeros(Nx, Nz) .+ ε * randn(Nx, Nz)
 rands_yz = zeros(Ny, Nz) .+ ε * randn(Ny, Nz)
 
-colormap = :thermal
-colorrange = (19.9, 19.96)
+colormap = get(ColorSchemes.thermal, [exp(3x) for x in range(0, 1, length=100)], :extrema)
+colorrange = (19.6, 19.96)
 
 fig = Figure(resolution = (1200, 1000))
 
@@ -75,11 +75,11 @@ xlims!(ax, xlims)
 ylims!(ax, ylims)
 zlims!(ax, zlims)
 
-Colorbar(fig[1, 2], colormap=colormap, limits=colorrange)
+Colorbar(fig[1, 2], label="°C", colormap=colormap, limits=colorrange)
 
 T_profile = mean(T[:, :, :, n], dims=(1, 2))
 ax = Axis(fig[1, 3], xlabel="Temperature (°C)", ylabel="z (m)", yticks=zticks, xgridvisible=false, ygridvisible=false)
-lines!(ax, T_profile[:], zc)
+lines!(ax, T_profile[:], zc, linewidth=4, color=GLMakie.Makie.wong_colors()[1])
 ylims!(ax, -Lz, 0)
 # hidedecorations!(ax, grid=true)
 
@@ -106,14 +106,14 @@ xlims!(ax, xlims)
 ylims!(ax, ylims)
 zlims!(ax, zlims)
 
-Colorbar(fig[2, 2], colormap=colormap, limits=colorrange)
+Colorbar(fig[2, 2], label="m/s K", colormap=colormap, limits=colorrange)
 
 wT_profile = dropdims(mean(wT[:, :, :, n], dims=(1, 2)), dims=(1, 2))
 wT_profile[Nz] = file["parameters/temperature_flux"]
 wT_profile[Nz-1] = (wT_profile[Nz] + wT_profile[Nz-2]) / 2
 xticks = ([0, 2e-6, 4e-6], ["0", "2×10⁻⁶", "4×10⁻⁶"])
 ax = Axis(fig[2, 3], xlabel="Heat flux (m/s K)", ylabel="z (m)", xticks=xticks, yticks=zticks, xgridvisible=false, ygridvisible=false)
-lines!(ax, wT_profile, zc)
+lines!(ax, wT_profile, zc, linewidth=4, color=GLMakie.Makie.wong_colors()[2])
 ylims!(ax, -Lz, 0)
 
 colsize!(fig.layout, 1, Relative(2/3))

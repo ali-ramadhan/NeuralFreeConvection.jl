@@ -1,13 +1,12 @@
 using Printf
+using ColorSchemes
 using GLMakie
 using Oceananigans
 using FreeConvection
 
-using GLMakie.Makie: wong_colors
-
 GLMakie.activate!()
 
-function plot_surfaces!(subfig, data, L, time_index)
+function plot_surfaces!(subfig, data, L, time_index, title="")
 
     Nx, Ny, Nz, Nt = size(data)
     Lx, Ly, Lz = L
@@ -16,20 +15,10 @@ function plot_surfaces!(subfig, data, L, time_index)
     yc = range(0, Ly, length=Ny)
     zc = range(-Lz, 0, length=Nz)
 
-    aspect = :data
-
-    xlabel = "x (m)"
-    ylabel = "y (m)"
-    zlabel = "z (m)"
-
     Δ = Lx/50
     xlims = (-Δ,  Lx+Δ)
     ylims = (-Δ,  Ly+Δ)
     zlims = (-Lz-Δ, Δ)
-
-    xticks = range(0,  Lx, length=5)
-    yticks = range(0,  Ly, length=5)
-    zticks = range(-Lz, 0, length=5)
 
     data_west = data[1, :, :, time_index]
     data_east = data[Nx, :, :, time_index]
@@ -43,7 +32,7 @@ function plot_surfaces!(subfig, data, L, time_index)
     rands_xz = zeros(Nx, Nz) .+ ε * randn(Nx, Nz)
     rands_yz = zeros(Ny, Nz) .+ ε * randn(Ny, Nz)
 
-    ax = Axis3(subfig)
+    ax = Axis3(subfig; title)
 
     colormap = :balance
     colorrange = (-0.2, 0.2)
@@ -69,7 +58,7 @@ Nz = 32
 ids_train = 1:9
 ids_test = setdiff(FreeConvection.SIMULATION_IDS, ids_train)
 
-data = load_data(ids_train, ids_test, Nz)
+# data = load_data(ids_train, ids_test, Nz)
 datasets = data.coarse_datasets
 ds = datasets[5]
 
@@ -80,7 +69,7 @@ n8 = 1153 # time index for t = 8 days
 ns = [n0, n2, n8]
 
 convective_adjustment_diffusivity = 2
-ca_solution = oceananigans_convective_adjustment(ds, K=convective_adjustment_diffusivity)
+# ca_solution = oceananigans_convective_adjustment(ds, K=convective_adjustment_diffusivity)
 
 T_param = ca_solution.T
 wT_param = ca_solution.wT
@@ -94,7 +83,7 @@ wT = ds["wT"]
 zc = znodes(T)
 zf = znodes(wT)
 
-colors = wong_colors()
+colors = ColorSchemes.tableau_10
 
 fig = Figure(resolution = (1000, 1000))
 
@@ -106,10 +95,11 @@ w3d = interior(ds3d["w"]) |> Array
 T3d = interior(ds3d["T"]) |> Array
 wT3d = w3d[:, :, 1:end-1, :] .* T3d
 data_3d = wT3d
+
 L = (512, 512, 256)
-plot_surfaces!(fig[1, 1:2], data_3d, L, 1)
-plot_surfaces!(fig[1, 3:4], data_3d, L, 2)
-plot_surfaces!(fig[1, 5:6], data_3d, L, 3)
+plot_surfaces!(fig[1, 1:2], data_3d, L, 2, "t = 1 day")
+plot_surfaces!(fig[1, 3:4], data_3d, L, 5, "t = 4 days")
+plot_surfaces!(fig[1, 5:6], data_3d, L, 9, "t = 8 days")
 
 colgap!(fig.layout, 10)
 rowgap!(fig.layout, 10)
@@ -152,6 +142,7 @@ for (i, n) in enumerate(ns)
     # end
 end
 
+ax.xticks = ([0, 5e-6, 1e-5, 1.5e-5], ["0", "5.0×10⁻⁶", "1.0×10⁻⁵", "1.5×10⁻⁵"])
 ax.yticks = 0:-32:-128
 ax.ytickformat = ys -> ["" for y in ys]
 ax.xgridvisible = false
@@ -160,9 +151,10 @@ ax.ygridvisible = false
 ylims!(-128, 0)
 
 entries = append!([LineElement(color=colors[l]) for l in 1:3], [LineElement(linestyle=s) for s in (:dash,)])
-labels = ["t = 0", "t = 2 days", "t = 8 days", "convective adjustment"]
+labels = ["t = 0 days", "t = 2 days", "t = 8 days", "convective adjustment"]
 Legend(fig[end+1, :], entries, labels, framevisible=false, orientation=:horizontal, tellwidth=false, tellheight=true)
 
 rowsize!(fig.layout, 1, Relative(1/4))
 
+# display(fig)
 save("figure3_training_data_plus_3d.png", fig)

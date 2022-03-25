@@ -1,13 +1,12 @@
 using Printf
 using ArgParse
 using JLD2
+using ColorSchemes
 using CairoMakie
 using OceanTurb
 using FreeConvection
 
 using Flux.Losses: mse
-using CairoMakie.Makie: wong_colors
-
 using Oceananigans: interior, znodes
 using Oceananigans.Units: days
 
@@ -23,7 +22,7 @@ function parse_command_line_arguments()
     return parse_args(settings)
 end
 
-function figure8_comparing_profiles(ds, nde_sol, kpp_sol, convective_adjustment_sol, T_scaling; filepath_prefix, time_index,
+function figure8_comparing_profiles(ds, nde_sol, kpp_sol, convective_adjustment_sol, T_scaling; filepath_prefix, time_index, colors,
                                     xticks_T=nothing, xticks_wT=nothing, xlims_T=nothing, xlims_wT=nothing)
     T = ds["T"]
     wT = ds["wT"]
@@ -40,8 +39,6 @@ function figure8_comparing_profiles(ds, nde_sol, kpp_sol, convective_adjustment_
     loss_nde = [loss(interior(T)[1, 1, :, n], nde_sol.T[:, n]) for n in 1:Nt] |> remove_zeros!
     loss_kpp = [loss(interior(T)[1, 1, :, n], kpp_sol.T[:, n]) for n in 1:Nt] |> remove_zeros!
     loss_ca  = [loss(interior(T)[1, 1, :, n], convective_adjustment_sol.T[:, n]) for n in 1:Nt] |> remove_zeros!
-
-    colors = wong_colors()
 
     fig = Figure()
 
@@ -126,16 +123,17 @@ kpp_solutions = Dict(id => free_convection_kpp(ds, parameters=kpp_parameters) fo
 # time_index = 577 # t = 4 days
 time_index = 1153 # t = 8 days
 
-for id in keys(datasets)
-    filepath_prefix = "figure8_comparing_profiles_simulation" * @sprintf("%02d", id)
-    @info "Plotting $filepath_prefix..."
-    figure8_comparing_profiles(datasets[id], nde_solutions[id], kpp_solutions[id], convective_adjustment_solutions[id], T_scaling; filepath_prefix, time_index)
-end
+# for id in keys(datasets)
+#     filepath_prefix = "figure8_comparing_profiles_simulation" * @sprintf("%02d", id)
+#     @info "Plotting $filepath_prefix..."
+#     figure8_comparing_profiles(datasets[id], nde_solutions[id], kpp_solutions[id], convective_adjustment_solutions[id], T_scaling; filepath_prefix, time_index)
+# end
 
 xticks_T = [19.5, 19.7, 19.9]
 xticks_wT = ([-0.5e-5, 0, 1e-5], ["-5×10⁻⁶", "0", "1×10⁻⁵"])
 xlims_T = (19.5, 19.9)
 xlims_wT = (-5e-6, 1e-5)
+colors = circshift(ColorSchemes.julia.colors, 1)
 filepath_prefix = "figure8_comparing_profiles_simulation11_pretty"
 figure8_comparing_profiles(datasets[11], nde_solutions[11], kpp_solutions[11], convective_adjustment_solutions[11], T_scaling;
-                           filepath_prefix, time_index, xticks_T, xticks_wT, xlims_T, xlims_wT)
+                           filepath_prefix, time_index, colors, xticks_T, xticks_wT, xlims_T, xlims_wT)

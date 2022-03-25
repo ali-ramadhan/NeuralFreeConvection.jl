@@ -53,16 +53,16 @@ function figure5_losses(ids, flux_loss_history_tof, flux_loss_history_tots, solu
 
     for sub_ids in simulation_sub_ids
         mean_flux_loss_tof_sub = [mean([mean_flux_loss_tof[id][e] for id in sub_ids]) for e in 1:epochs_tof]
-        lines!(ax11, 1:epochs_tof, mean_flux_loss_tof_sub, color=simulation_color(sub_ids[1]))
+        lines!(ax11, 1:epochs_tof, mean_flux_loss_tof_sub, linewidth=3, color=simulation_color(sub_ids[1]))
 
         mean_flux_loss_tots_sub = [mean([mean_flux_loss_tots[id][e] for id in sub_ids]) for e in 1:epochs_tots]
-        lines!(ax12, 1:epochs_tots, mean_flux_loss_tots_sub, color=simulation_color(sub_ids[1]))
+        lines!(ax12, 1:epochs_tots, mean_flux_loss_tots_sub, linewidth=3, color=simulation_color(sub_ids[1]))
 
         mean_sol_loss_tof_sub = [mean([mean_sol_loss_tof[id][e] for id in sub_ids]) for e in 1:epochs_tof]
-        lines!(ax21, 1:epochs_tof, mean_sol_loss_tof_sub, color=simulation_color(sub_ids[1]))
+        lines!(ax21, 1:epochs_tof, mean_sol_loss_tof_sub, linewidth=3, color=simulation_color(sub_ids[1]))
 
         mean_sol_loss_tots_sub = [mean([mean_sol_loss_tots[id][e] for id in sub_ids]) for e in 1:epochs_tots]
-        lines!(ax22, 1:epochs_tots, mean_sol_loss_tots_sub, color=simulation_color(sub_ids[1]))
+        lines!(ax22, 1:epochs_tots, mean_sol_loss_tots_sub, linewidth=3, color=simulation_color(sub_ids[1]))
     end
 
     xlims!(ax11, (0, epochs_tof))

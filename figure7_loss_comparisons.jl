@@ -1,13 +1,13 @@
 using Statistics
 using ArgParse
 using JLD2
+using ColorTypes
+using ColorSchemes
 using CairoMakie
 using OceanTurb
 using FreeConvection
 
 using Flux.Losses: mse
-using CairoMakie.Makie: wong_colors
-
 using Oceananigans: interior
 using Oceananigans.Units: days
 
@@ -23,9 +23,10 @@ function parse_command_line_arguments()
     return parse_args(settings)
 end
 
-function figure7_loss_comparisons(datasets, nde_sols, kpp_sols, convective_adjustment_sols, T_scaling; filepath_prefix, rows=2, cols=3, alpha=0.3, ylims=(1e-6, 1e-1))
+function figure7_loss_comparisons(datasets, nde_sols, kpp_sols, convective_adjustment_sols, T_scaling; filepath_prefix, colors, rows=2, cols=3, alpha=0.3, ylims=(1e-6, 1e-2))
 
     loss(T, T̂) = mse(T_scaling.(T), T_scaling.(T̂))
+    remove_zeros!(xs) = replace!(x -> iszero(x) ? NaN : x, xs)
 
     T = datasets[1]["T"]
     Nt = size(T, 4)
@@ -38,9 +39,6 @@ function figure7_loss_comparisons(datasets, nde_sols, kpp_sols, convective_adjus
     loss_ca = Dict(id => [loss(T_solution[id][n], convective_adjustment_sols[id].T[:, n]) for n in 1:Nt] for id in keys(datasets))
 
     fig = Figure()
-
-    colors = wong_colors()
-    colors_alpha = wong_colors(alpha)
 
     # Ordered so that training subplot shows up at the bottom.
     simulation_ids = (10:12, 16:18, 1:9, 13:15, 19:21)
@@ -55,16 +53,12 @@ function figure7_loss_comparisons(datasets, nde_sols, kpp_sols, convective_adjus
                                    xgridvisible=false, ygridvisible=false, xticklabelsvisible=i == cols, yticklabelsvisible=j == 1)
 
         for (p, loss_param) in enumerate((loss_kpp, loss_ca, loss_nde))
-            loss_param_min = [minimum([loss_param[id][n] for id in sub_ids]) for n in 1:Nt]
-            loss_param_max = [maximum([loss_param[id][n] for id in sub_ids]) for n in 1:Nt]
-            loss_param_mean = [mean([loss_param[id][n] for id in sub_ids]) for n in 1:Nt]
+            loss_param_min = [minimum([loss_param[id][n] for id in sub_ids]) for n in 1:Nt] |> remove_zeros!
+            loss_param_max = [maximum([loss_param[id][n] for id in sub_ids]) for n in 1:Nt] |> remove_zeros!
+            loss_param_mean = [mean([loss_param[id][n] for id in sub_ids]) for n in 1:Nt] |> remove_zeros!
 
-            for loss_param_stat in (loss_param_min, loss_param_max, loss_param_mean)
-                replace!(x -> iszero(x) ? NaN : x, loss_param_stat)
-            end
-
-            band!(ax, times, loss_param_min, loss_param_max, color=colors_alpha[p])
-            lines!(ax, times, loss_param_mean, color=colors[p])
+            band!(ax, times, loss_param_min, loss_param_max, color=RGBA(colors[p], alpha))
+            lines!(ax, times, loss_param_mean, linewidth=3, color=colors[p])
         end
 
         xlims!(0, times[end])
@@ -75,8 +69,8 @@ function figure7_loss_comparisons(datasets, nde_sols, kpp_sols, convective_adjus
     labels = ["K-Profile Parameterization", "Convective adjustment", "Neural differential equation"]
     Legend(fig[3, 2], entries, labels, framevisible=false, tellwidth=false, tellheight=false)
 
-    save(filepath_prefix * ".png", fig, px_per_unit=2)
-    save(filepath_prefix * ".pdf", fig, pt_per_unit=2)
+    save("$filepath_prefix.png", fig, px_per_unit=2)
+    save("$filepath_prefix.pdf", fig, pt_per_unit=2)
 
     return fig
 end
@@ -105,5 +99,6 @@ close(file)
 kpp_parameters = OceanTurb.KPP.Parameters(CSL=2/3, CNL=5.0, Cb_T=0.16, CKE=8.0)
 kpp_solutions = Dict(id => free_convection_kpp(ds, parameters=kpp_parameters) for (id, ds) in data.coarse_datasets)
 
+colors = ColorSchemes.julia.colors
 filepath_prefix = "figure7_loss_comparisons"
-figure7_loss_comparisons(datasets, nde_solutions, kpp_solutions, convective_adjustment_solutions, T_scaling; filepath_prefix)
+figure7_loss_comparisons(datasets, nde_solutions, kpp_solutions, convective_adjustment_solutions, T_scaling; filepath_prefix, colors)
