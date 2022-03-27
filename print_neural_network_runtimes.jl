@@ -20,7 +20,7 @@ for method in ("trained_on_fluxes", "trained_on_timeseries")
         n_params = sum(length, params(NN))
 
         epochs = keys(file["runtime"]) |> length
-        runtimes = [file["runtime/$e"] for e in 1:epochs]
+        runtimes = [file["runtime/$e"] for e in 2:epochs]  # ignore precompilation time
 
         close(file)
 
