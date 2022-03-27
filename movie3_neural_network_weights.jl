@@ -18,7 +18,7 @@ function parse_command_line_arguments()
     return parse_args(settings)
 end
 
-function movie3_neural_network_weights(history_filepath; filepath)
+function movie3_neural_network_weights(history_filepath; filepath, framerate=30)
     file = jldopen(history_filepath)
 
     fig = Figure()
@@ -36,10 +36,11 @@ function movie3_neural_network_weights(history_filepath; filepath)
     ax_kwargs = (; xticksvisible, yticksvisible, xticklabelsvisible, yticklabelsvisible, xgridvisible, ygridvisible,
                    leftspinevisible, rightspinevisible, topspinevisible, bottomspinevisible)
 
-    epoch = Node(1)
-    NN = file["neural_network/$epoch"]
+    NN = file["neural_network/1"]
 
     spacing_weight_bias = 5
+
+    heatmaps = []
 
     for (l, layer) in enumerate(NN.layers)
         weight_size = size(layer.weight)
@@ -49,20 +50,33 @@ function movie3_neural_network_weights(history_filepath; filepath)
         elements_y = max(weight_size[2], bias_length)
         parameters = fill(NaN, (elements_x, elements_y))
 
-        parameters[1:weight_size[1], 1:weight_size[2]] .= layer.weight
-        parameters[end, 1:bias_length] .= layer.bias
-
         ax = Axis(fig[1, l], title="layer $l"; ax_kwargs...)
-        heatmap!(ax, parameters, colormap=:curl, colorrange=(-0.5, 0.5))
+        hmap = heatmap!(ax, 1:elements_x, 1:elements_y, parameters, colormap=:curl, colorrange=(-0.5, 0.5))
+        push!(heatmaps, hmap)
     end
 
-    Colorbar(fig[1, end+1], colormap=:curl, limits=(-0.5, 0.5))
-    Label(fig[0, :], "Epoch 500")
+    cbar = Colorbar(fig[1, end+1], colormap=:curl, limits=(-0.5, 0.5))
+    label = Label(fig[0, :], "Epoch 1")
 
-    epochs = 100
-    record(fig, filepath, 1:epochs; framerate=fps) do n
-        @info "Animating $filepath frame $n/$Nt..."
-        epoch[] = n
+    epochs = keys(file["neural_network"]) |> length
+    record(fig, filepath, 1:epochs; framerate) do e
+        @info "Animating $filepath frame $e/$epochs..."
+
+        NN = file["neural_network/$e"]
+        for (l, layer) in enumerate(NN.layers)
+            weight_size = size(layer.weight)
+            bias_length = length(layer.bias)
+
+            elements_x = weight_size[1] + spacing_weight_bias + 1
+            elements_y = max(weight_size[2], bias_length)
+            parameters = fill(NaN, (elements_x, elements_y))
+
+            parameters[1:weight_size[1], 1:weight_size[2]] .= layer.weight
+            parameters[end, 1:bias_length] .= layer.bias
+
+            heatmaps[l][3] = parameters
+            label.text = "Epoch $e"
+        end
     end
 
     close(file)
@@ -72,3 +86,5 @@ end
 
 args = parse_command_line_arguments()
 history_filepath = args["history"]
+
+movie3_neural_network_weights(history_filepath, filepath="weights.mp4")

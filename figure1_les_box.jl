@@ -42,7 +42,7 @@ rands_xy = zeros(Nx, Ny) .+ ε * randn(Nx, Ny)
 rands_xz = zeros(Nx, Nz) .+ ε * randn(Nx, Nz)
 rands_yz = zeros(Ny, Nz) .+ ε * randn(Ny, Nz)
 
-colormap = get(ColorSchemes.thermal, [exp(3x) for x in range(0, 1, length=100)], :extrema)
+colormap = get(ColorSchemes.RdYlBu_11 |> reverse, [exp(4x) for x in range(0, 1, length=100)], :extrema)
 colorrange = (19.6, 19.96)
 
 fig = Figure(resolution = (1200, 1000))
