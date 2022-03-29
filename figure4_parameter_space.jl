@@ -87,3 +87,64 @@ let
 
     return fig
 end
+
+let
+    fig = Figure()
+
+    xticksvisible = false
+    yticksvisible = false
+    xticklabelsvisible = false
+    yticklabelsvisible = false
+    xgridvisible = false
+    ygridvisible = false
+    leftspinevisible = false
+    rightspinevisible = false
+    topspinevisible = false
+    bottomspinevisible = false
+    ax_kwargs = (; xticksvisible, yticksvisible, xticklabelsvisible, yticklabelsvisible, xgridvisible, ygridvisible,
+                   leftspinevisible, rightspinevisible, topspinevisible, bottomspinevisible)
+    ax_kwargs_last_row = (; yticksvisible, yticklabelsvisible, xgridvisible, ygridvisible,
+                            leftspinevisible, rightspinevisible, topspinevisible)
+
+    for (n, Qb) in enumerate(Qbs)
+        T = datasets[n]["T"]
+        Nz = T.grid.Nz
+        Lz = T.grid.Lz
+        Δz = Lz / Nz
+        T₀ = T[1, 1, Int(Nz/2):Nz, 1]
+        N² = diff(T₀) / Δz * (α * g)
+
+        ax_kwargs_row = n < length(Qbs) ? ax_kwargs : ax_kwargs_last_row
+        xlabel_ax1 = n < length(Qbs) ? "" : "Surface buoyancy flux (m²/s³)"
+        xlabel_ax2 = n < length(Qbs) ? "" : "Stratification (1/s²)"
+
+        ax1 = fig[n, 1] = Axis(fig, xlabel=xlabel_ax1; ax_kwargs_row...)
+        scatter!(ax1, [Qb], [1], color=simulation_color(n))
+        text!(ax1, string(n), position=(-0.2e-8, 1), align=(:center, :center), color=simulation_color(n))
+        vlines!(ax1, [1e-8, 3e-8, 5e-8], color=simulation_color(1, alpha=0.5), linestyle=:dash)
+        xlims!(ax1, (-0.5e-8, 6.5e-8))
+
+        ax2 = fig[n, 2] = Axis(fig, xlabel=xlabel_ax2; ax_kwargs_row...)
+        bins = range(0, 3e-5, length=26)
+        # hist!(ax2, N², color=simulation_color(n); bins)
+        density!(ax2, N², bandwidth=1e-6, color=simulation_color(n))
+        xlims!(ax2, (0, 3e-5))
+
+        if n == length(Qbs)
+            ax1.xticks = ([1e-8, 3e-8, 5e-8], ["1×10⁻⁸", "3×10⁻⁸", "5×10⁻⁸"])
+            ax2.xticks = ([0, 1e-5, 2e-5, 3e-5], ["0", "1×10⁻⁵", "2×10⁻⁵", "3×10⁻⁵"])
+        end
+    end
+
+    rowgap!(fig.layout, 0)
+
+    entry_ids = (1, 10, 13, 16, 19)
+    entries = [PolyElement(color=simulation_color(id)) for id in entry_ids]
+    labels = [label(id) for id in entry_ids]
+    Legend(fig[0, :], entries, labels, orientation=:horizontal, framevisible=false)
+
+    save("figure4_parameter_space_v2.png", fig, px_per_unit=2)
+    save("figure4_parameter_space_v2.pdf", fig, pt_per_unit=2)
+
+    return fig
+end
