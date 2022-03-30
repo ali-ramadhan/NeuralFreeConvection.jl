@@ -133,7 +133,10 @@ xticks_T = [19.5, 19.7, 19.9]
 xticks_wT = ([-0.5e-5, 0, 1e-5], ["-5×10⁻⁶", "0", "1×10⁻⁵"])
 xlims_T = (19.5, 19.9)
 xlims_wT = (-5e-6, 1e-5)
-colors = circshift(ColorSchemes.julia.colors, 1)
+
+colors = ColorSchemes.julia.colors
+permute!(colors, [4, 2, 1, 3])
+
 filepath_prefix = "figure8_comparing_profiles_simulation11_pretty"
 figure8_comparing_profiles(datasets[11], nde_solutions[11], kpp_solutions[11], convective_adjustment_solutions[11], T_scaling;
                            filepath_prefix, time_index, colors, xticks_T, xticks_wT, xlims_T, xlims_wT)
