@@ -1,6 +1,6 @@
 import OceanTurb
 
-function free_convection_kpp(ds; parameters=OceanTurb.KPP.Parameters(), Δt=600)
+function free_convection_kpp(ds; parameters=OceanTurb.KPP.Parameters(), Δt=600, times=nothing)
 
     ρ₀ = 1027.0
     cₚ = 4000.0
@@ -16,8 +16,12 @@ function free_convection_kpp(ds; parameters=OceanTurb.KPP.Parameters(), Δt=600)
     zc = znodes(T)
     zf = znodes(wT)
     H = abs(zf[1])
-    Nt = size(T, 4)
-    times = T.times
+
+    if isnothing(times)
+        times = T.times
+    end
+
+    Nt = length(times)
 
     model = OceanTurb.KPP.Model(N=N, H=H, stepper=:BackwardEuler, constants=constants, parameters=parameters)
 

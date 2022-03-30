@@ -1,3 +1,5 @@
+using BenchmarkTools
+
 function convective_adjustment!(model, Δt, K)
     Nz, Δz = model.grid.Nz, model.grid.Δz
     T = model.tracers.T
@@ -92,15 +94,21 @@ function base_model(ds; forcing=NamedTuple())
     return model
 end
 
-function oceananigans_convective_adjustment(ds; output_dir=".", Δt=600, K=10)
+function oceananigans_convective_adjustment(ds; output_dir=".", Δt=600, K=10, benchmark=false)
     model = base_model(ds)
 
     ## Simulation setup
 
+    runtime = 0
+
     function progress_convective_adjustment(simulation)
         clock = simulation.model.clock
         # @info "Convective adjustment: iteration = $(clock.iteration), time = $(prettytime(clock.time))"
+
+        t₀ = time_ns()
         convective_adjustment!(simulation.model, simulation.Δt, K)
+        runtime += (time_ns() - t₀) * 1e-9
+
         return nothing
     end
 
@@ -140,7 +148,11 @@ function oceananigans_convective_adjustment(ds; output_dir=".", Δt=600, K=10)
 
     solution = (; T, wT)
 
-    return solution
+    if benchmark
+        return solution, runtime
+    else
+        return solution
+    end
 end
 
 function oceananigans_convective_adjustment_with_neural_network(ds; output_dir, nn_filepath, Δt=600, K=10)
