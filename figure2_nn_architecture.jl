@@ -39,7 +39,7 @@ function figure2_nn_architecture(ds; filepath_prefix, convective_adjustment_diff
     ax.ygridvisible = false
 
     # xlims!(19.5, 20)
-    ylims!(-256, 0)
+    ylims!(-256-5, 0+5)
 
     ## Right panel: heat flux
 
@@ -48,6 +48,7 @@ function figure2_nn_architecture(ds; filepath_prefix, convective_adjustment_diff
     wT_missing_n = wT_missing[:, n4]
     lines!(ax, wT_missing_n, zf, linewidth=3, color=colors[2])
     scatter!(ax, wT_missing_n[2:end-1], zf[2:end-1], color=colors[2])
+    scatter!(ax, [wT_missing_n[1], wT_missing_n[end]], [zf[1], zf[end]], marker=:rect, color=colors[6])
 
     ax.xticks = ([-2e-6, -1e-6, 0], ["-2×10⁻⁶", "-1×10⁻⁶", "0"])
     ax.yticks = 0:-64:-256
@@ -55,13 +56,13 @@ function figure2_nn_architecture(ds; filepath_prefix, convective_adjustment_diff
     ax.xgridvisible = false
     ax.ygridvisible = false
 
-    ylims!(-256, 0)
+    ylims!(-256-5, 0+5)
 
     save("$filepath_prefix.png", fig, px_per_unit=2)
     save("$filepath_prefix.pdf", fig, pt_per_unit=2)
     save("$filepath_prefix.svg", fig, pt_per_unit=2)
 
-    return nothing
+    return fig
 end
 
 Nz = 32
