@@ -75,6 +75,7 @@ T_param = ca_solution.T
 wT_param = ca_solution.wT
 
 wT_LES = interior(ds["wT"])[1, 1, :, :]
+κₑ_∂z_T = interior(ds["κₑ_∂z_T"])[1, 1, :, :]
 wT_missing = wT_LES .- wT_param
 
 T = ds["T"]
@@ -110,10 +111,11 @@ ax = fig[2, 1:3] = Axis(fig, xlabel="Temperature (°C)", ylabel="z (m)")
 
 for (i, n) in enumerate(ns)
     T_n = interior(T)[1, 1, :, n]
-    lines!(ax, T_n, zc, linewidth=3, color=colors[i])
+    scatter!(ax, T_n, zc, color=colors[i])
+    lines!(ax, T_n, zc, linewidth=4, color=colors[i])
 
     T_param_n = T_param[:, n]
-    lines!(ax, T_param_n, zc, linewidth=3, color=colors[i], linestyle=:dash)
+    lines!(ax, T_param_n, zc, linewidth=4, color=colors[i], linestyle=:dash)
 end
 
 ax.yticks = 0:-32:-128
@@ -130,15 +132,17 @@ ax = fig[2, 4:6] = Axis(fig, xlabel="Heat flux (m/s K)")
 
 for (i, n) in enumerate(ns)
     wT_n = interior(wT)[1, 1, :, n]
-    lines!(ax, wT_n, zf, linewidth=3, color=colors[i])
+    κₑ_∂z_T_n = κₑ_∂z_T[:, n]
+    scatter!(ax, wT_n .- κₑ_∂z_T_n, zf, color=colors[i])
+    lines!(ax, wT_n .- κₑ_∂z_T_n, zf, linewidth=4, color=colors[i])
 
     wT_param_n = wT_param[:, n]
-    lines!(ax, wT_param_n, zf, linewidth=3, color=colors[i], linestyle=:dash)
+    lines!(ax, wT_param_n, zf, linewidth=4, color=colors[i], linestyle=:dash)
 
     # Easier to infer wT_missing by eye so I'll leave it off.
     # if plot_missing_flux
     #     wT_missing_n = wT_missing[:, n]
-    #     lines!(ax, wT_missing_n, zf, linewidth=3, color=colors[i], linestyle=:dot)
+    #     lines!(ax, wT_missing_n, zf, linewidth=4, color=colors[i], linestyle=:dot)
     # end
 end
 
@@ -150,7 +154,7 @@ ax.ygridvisible = false
 
 ylims!(-128, 0)
 
-entries = append!([LineElement(color=colors[l]) for l in 1:3], [LineElement(linestyle=s) for s in (:dash,)])
+entries = append!([LineElement(color=colors[l], linewidth=4) for l in 1:3], [LineElement(linestyle=s) for s in (:dash,)])
 labels = ["t = 0 days", "t = 2 days", "t = 8 days", "convective adjustment"]
 Legend(fig[end+1, :], entries, labels, framevisible=false, orientation=:horizontal, tellwidth=false, tellheight=true)
 
