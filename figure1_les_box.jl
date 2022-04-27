@@ -9,7 +9,7 @@ using GLMakie
 filepath = "free_convection_19/3d.jld2"
 file = jldopen(filepath)
 
-n = time_index = 3
+n = time_index = 3  # time index for t = 2 days
 
 Nx = file["grid/Nx"]
 Ny = file["grid/Ny"]
@@ -108,15 +108,25 @@ zlims!(ax, zlims)
 
 Colorbar(fig[2, 2], label="m/s K", colormap=colormap, limits=colorrange)
 
-wT_profile = dropdims(mean(wT[:, :, :, n], dims=(1, 2)), dims=(1, 2))
-wT_profile[Nz] = file["parameters/temperature_flux"]
-wT_profile[Nz-1] = (wT_profile[Nz] + wT_profile[Nz-2]) / 2
+stats_filepath = "/home/alir/storage2/LESbrary.jl/data/free_convection_19/instantaneous_statistics.jld2"
+stats_file = jldopen(stats_filepath)
+iterations = keys(stats_file["timeseries/t"])
+
+n′ = 289  # time index for t = 2 days
+i′ = iterations[n′]
+wT_profile = stats_file["timeseries/wT/$i′"][:] .- stats_file["timeseries/κₑ_∂z_T/$i′"][:]
+wT_profile[Nz+1] = file["parameters/temperature_flux"]
+wT_profile[Nz] = (wT_profile[Nz-1] + wT_profile[Nz+1]) / 2
+
 xticks = ([0, 2e-6, 4e-6], ["0", "2×10⁻⁶", "4×10⁻⁶"])
 ax = Axis(fig[2, 3], xlabel="Heat flux (m/s K)", ylabel="z (m)", xticks=xticks, yticks=zticks, xgridvisible=false, ygridvisible=false)
-lines!(ax, wT_profile, zc, linewidth=4, color=GLMakie.Makie.wong_colors()[2])
+lines!(ax, wT_profile, zf, linewidth=4, color=GLMakie.Makie.wong_colors()[2])
 ylims!(ax, -Lz, 0)
 
 colsize!(fig.layout, 1, Relative(2/3))
 
 # display(fig)
 save("figure1_les_box.png", fig, px_per_unit=2)
+
+close(file)
+close(stats_file)
