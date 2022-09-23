@@ -75,12 +75,12 @@ begin
     @show best_K_CA
 
     ax1 = Axis(fig[1, 1], ylabel="Mean squared error loss", xscale=log10, yscale=log10)
-    lines!(ax1, K_CAs, losses)
-    vlines!(ax1, best_K_CA, color=(:red, 0.5))
+    lines!(ax1, K_CAs, losses, linewidth=3)
+    vlines!(ax1, best_K_CA, color=(:red, 0.5), linewidth=3)
 
     ax2 = Axis(fig[2, 1], xlabel="Convective adjustment diffusivity", ylabel="Runtime (seconds)", xscale=log10)
-    lines!(ax2, K_CAs, runtimes)
-    vlines!(ax2, best_K_CA, color=(:red, 0.5))
+    lines!(ax2, K_CAs, runtimes, linewidth=3)
+    vlines!(ax2, best_K_CA, color=(:red, 0.5), linewidth=3)
 
     xlims!(ax1, (K_CAs[1], K_CAs[end]))
     xlims!(ax2, (K_CAs[1], K_CAs[end]))

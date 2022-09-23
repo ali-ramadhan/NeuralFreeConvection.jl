@@ -35,7 +35,7 @@ function figure9_comparing_architectures(solution_loss_histories, labels; filepa
         end
     end
 
-    entries = [LineElement(color=c) for c in colors[1:5]]
+    entries = [LineElement(color=c, linewidth=3) for c in colors[1:5]]
     Legend(fig[3, 2], entries, labels, framevisible=false, tellwidth=false, tellheight=false)
 
     @info "Saving $filepath_prefix..."
@@ -57,4 +57,4 @@ solution_loss_histories = [file["solution_loss_history"] for file in files]
 
 filepath_prefix="figure9_comparing_architectures"
 @info "Plotting $filepath_prefix..."
-figure9_comparing_architectures(solution_loss_histories, labels, colors=ColorSchemes.tab10; filepath_prefix)
+figure9_comparing_architectures(solution_loss_histories, labels, colors=ColorSchemes.Austria; filepath_prefix)

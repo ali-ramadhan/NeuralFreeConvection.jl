@@ -72,8 +72,8 @@ function figure5_losses(ids, flux_loss_history_tof, flux_loss_history_tots, solu
 
     ylims!(ax11, (0, 3e-1))
     ylims!(ax12, (0, 3e-1))
-    ylims!(ax21, (1e-5, 2e-3))
-    ylims!(ax22, (1e-5, 2e-3))
+    ylims!(ax21, (5e-6, 2e-3))
+    ylims!(ax22, (5e-6, 2e-3))
 
     ax21.yticks = ([1e-5, 1e-4, 1e-3], ["10⁻⁵", "10⁻⁴", "10⁻³"])
     ax22.yticks = ([1e-5, 1e-4, 1e-3], ["10⁻⁵", "10⁻⁴", "10⁻³"])
